@@ -21,6 +21,7 @@ class LLMRequest(BaseModel):
     json_schema: dict[str, Any] | None = None
     max_tokens: int = 1024
     temperature: float = 0.2
+    stop: list[str] | None = None
 
 
 class Completion(BaseModel):

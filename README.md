@@ -3,13 +3,14 @@
 **Hivemind Execution X** is an agent-native desktop IDE with live multi-agent observability.
 The plan lives in [HEX_Mind_Refined_Plan.md](HEX_Mind_Refined_Plan.md).
 
-**Current milestone: M2 (chat, Router, context).**
+**Current milestone: M3 (worker swarm and safe execution).**
 
 | Milestone | Delivered |
 |---|---|
 | M0 | Electron shell, secure preload bridge, React IDE frame, token-protected FastAPI health check |
 | M1 | PostgreSQL schema + Alembic migrations, workspace path guard, file explorer, Monaco editor with tabs and stale-file protection, per-run event log, Ollama provider with logged calls |
 | M2 | Persistent project conversations with Ask / Edit / Auto modes; ContextManager (budgeted, redacted, reads files fresh from disk, rolling summary); LLM Router with schema-validated output, one repair retry, deterministic policy and fallback, all decisions logged; LangGraph conversation and run graphs (worker nodes are labeled **stubs** until M3); typed event schema v1 with generated TypeScript types; run event viewer; routing-label tooling |
+| M3 | Blackboard with atomic claims (`FOR UPDATE SKIP LOCKED`), leases, dependencies and file-overlap scheduling; CrewAI Planner/Coder/Reviewer whose every model call goes through our ProviderRouter; per-run Git worktree from a snapshot of the user's working state; MCP workspace server as the agents' only tool surface; Docker sandbox for checks; ChromaDB coding standards and self-logs; diff review (read-only); **event schema v1 frozen** |
 
 ## Layout
 
@@ -33,8 +34,9 @@ docker-compose.yml  PostgreSQL (127.0.0.1:5433) + test database
 
 - Node.js 20+ and npm 10+
 - Python 3.11+ and [uv](https://docs.astral.sh/uv/)
-- Docker Desktop (for PostgreSQL)
-- [Ollama](https://ollama.com) with the coding model: `ollama pull qwen2.5-coder:7b`
+- Docker Desktop (PostgreSQL, and the sandbox that runs agent checks)
+- Git
+- [Ollama](https://ollama.com) with the coding and embedding models: `ollama pull qwen2.5-coder:7b` and `ollama pull nomic-embed-text`
 
 ## Setup
 
@@ -47,6 +49,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"   # paste into HEXM
 
 npm run db:up                        # start PostgreSQL
 npm run db:migrate                   # apply migrations
+docker pull node:22-alpine           # sandbox image for agent checks (pulled on first use otherwise)
 ```
 
 ## Run (development)
@@ -67,7 +70,18 @@ The **Agent Chat** panel works against the open workspace:
 - **Edit** starts a run.
 - **Auto** lets the Router decide, and it asks for clarification when it's unsure.
 
-Each reply shows the route, the confidence, any fallback, and the files used as context. Run events appear in the **Agent Events** tab. In M2 the worker steps are stubs, so runs change no files, and their events are marked `stub`.
+Each reply shows the route, the confidence, any fallback, and the files used as context.
+
+**Agent runs (Edit mode)** need the workspace to be a Git repository. If it isn't, use the **No Git: initialize** button in the top bar. A run follows these steps:
+1. It snapshots your current files, including uncommitted ones, and creates an isolated worktree under `%LOCALAPPDATA%\hexmind\worktrees`.
+2. The Planner creates Blackboard tasks.
+3. Coders claim tasks and edit files only through the MCP workspace tools.
+4. Every change is checked by running the project's `test` check in a Docker container with no network, and the Reviewer approves the change or requests another round.
+5. The run ends in `awaiting_approval`.
+
+Follow the run in the **Agent Events** and **Tasks** tabs, then open **Review changes** to see the diff. Your files are not modified. Applying, rejecting and reverting arrive in M6.
+
+**Checks** come from `.hexmind/profile.yaml` in your workspace, for example `image: node:22-alpine` with `checks: {test: node --test}`. Without that file, H.E.X Mind detects a default. Agents can only run checks by name, can't edit the profile, and only allowlisted images are used. Checks run offline, so tests must not need `npm install`; dependency installation is a later, approval-gated step.
 
 To check the model provider end to end (the call is logged in `llm_calls`):
 

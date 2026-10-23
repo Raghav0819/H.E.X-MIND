@@ -6,9 +6,10 @@ import { useRunEvents } from './useRunEvents'
 interface Props {
   api: ApiClient
   runId: string | null
+  onReview: (runId: string) => void
 }
 
-export function RunEventsPanel({ api, runId }: Props) {
+export function RunEventsPanel({ api, runId, onReview }: Props) {
   const { run, events, error } = useRunEvents(api, runId)
 
   if (!runId) {
@@ -23,6 +24,11 @@ export function RunEventsPanel({ api, runId }: Props) {
           <span className="run-events__status" data-status={run.status}>
             {run.status}
           </span>
+        )}
+        {run?.status === 'awaiting_approval' && (
+          <button type="button" className="button button--small button--primary" onClick={() => onReview(run.id)}>
+            Review changes
+          </button>
         )}
         {error && (
           <span className="run-events__error" role="alert">

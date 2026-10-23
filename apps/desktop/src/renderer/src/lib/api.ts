@@ -183,5 +183,45 @@ export interface Run {
   finished_at: string | null
 }
 
-/** Run statuses after which no further events are expected. */
-export const TERMINAL_RUN_STATUSES = new Set(['completed', 'failed', 'cancelled', 'applied', 'rejected', 'reverted'])
+/** Run statuses after which no further events arrive until the user acts. */
+export const SETTLED_RUN_STATUSES = new Set([
+  'awaiting_approval',
+  'completed',
+  'failed',
+  'cancelled',
+  'applied',
+  'rejected',
+  'reverted'
+])
+
+export interface Task {
+  id: string
+  run_id: string
+  title: string
+  description: string
+  acceptance_criteria: string[]
+  target_files: string[]
+  status: string
+  complexity: string | null
+  priority: number
+  claimed_by: string | null
+  attempts: number
+  max_attempts: number
+  created_at: string
+  updated_at: string
+}
+
+export interface FileDiff {
+  path: string
+  change_type: 'added' | 'modified' | 'deleted'
+  status: string
+  original: string | null
+  modified: string | null
+  diff: string
+}
+
+export interface RunDiff {
+  run_id: string
+  base_commit: string | null
+  files: FileDiff[]
+}

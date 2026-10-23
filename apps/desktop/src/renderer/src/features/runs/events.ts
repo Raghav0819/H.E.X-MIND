@@ -46,6 +46,34 @@ export function describeEvent(event: AgentEvent): string {
       const tokens = p.input_tokens === null ? '' : `, ${p.input_tokens}→${p.output_tokens ?? '?'} tokens`
       return `${p.purpose} ${p.ok ? 'ok' : `failed: ${p.error}`} in ${p.latency_ms} ms${tokens}`
     }
+    case 'task_created': {
+      const files = event.payload.target_files.length ? ` [${event.payload.target_files.join(', ')}]` : ''
+      return `${event.payload.title}${files}`
+    }
+    case 'task_claimed':
+    case 'task_started':
+      return event.payload.worker
+    case 'tool_called':
+      return `${event.payload.tool}${event.payload.ok ? '' : ' (error)'}: ${event.payload.summary ?? ''}`
+    case 'check_started':
+      return event.payload.name
+    case 'check_completed': {
+      const p = event.payload
+      const result = p.exit_code === null ? 'did not complete' : p.exit_code === 0 ? 'passed' : `failed (exit ${p.exit_code})`
+      return `${p.name} ${result}${p.duration_ms ? ` in ${(p.duration_ms / 1000).toFixed(1)}s` : ''}`
+    }
+    case 'review_started':
+      return event.payload.reviewer
+    case 'review_completed':
+      return `${event.payload.verdict}${event.payload.findings ? `, ${event.payload.findings} finding(s)` : ''}`
+    case 'task_completed':
+      return event.payload.summary ?? 'completed'
+    case 'task_failed':
+      return event.payload.error
+    case 'task_blocked':
+      return event.payload.reason
+    case 'diff_ready':
+      return `${event.payload.files.length} file(s): ${event.payload.files.join(', ')}`
     case 'run_completed':
       return event.payload.summary ?? 'completed'
     case 'run_failed':

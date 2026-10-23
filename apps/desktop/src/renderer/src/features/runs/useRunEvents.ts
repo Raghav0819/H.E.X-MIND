@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import type { AgentEvent } from '../../generated/events'
-import { TERMINAL_RUN_STATUSES, type ApiClient, type Run } from '../../lib/api'
+import { SETTLED_RUN_STATUSES, type ApiClient, type Run } from '../../lib/api'
 import { contiguousSeq, mergeEvents } from './events'
 
 const POLL_MS = 1000
@@ -39,7 +39,7 @@ export function useRunEvents(api: ApiClient, runId: string | null): RunEvents {
         eventsRef.current = mergeEvents(eventsRef.current, incoming)
         setState({ run, events: eventsRef.current, error: null })
         const caughtUp = contiguousSeq(eventsRef.current) >= run.last_event_seq
-        if (TERMINAL_RUN_STATUSES.has(run.status) && caughtUp) return
+        if (SETTLED_RUN_STATUSES.has(run.status) && caughtUp) return
       } catch (err) {
         if (cancelled) return
         setState((s) => ({ ...s, error: err instanceof Error ? err.message : String(err) }))

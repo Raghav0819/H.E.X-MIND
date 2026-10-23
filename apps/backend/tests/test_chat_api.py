@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from sqlalchemy import func, select
 
 from app.db.models import Conversation, LLMCall, RouterDecision
-from tests.conftest import router_json, scripted, use_adapter
+from tests.conftest import fake_run_executor, router_json, scripted, use_adapter
 
 
 async def _conversation(client: httpx.AsyncClient, workspace: Path) -> tuple[str, str]:
@@ -83,9 +83,10 @@ async def test_follow_up_is_linked_and_sees_history(
     assert "assistant: An answer." in follow_up_prompt
 
 
-async def test_edit_starts_linked_runs_with_stub_events(
+async def test_edit_starts_linked_runs(
     app: FastAPI, client: httpx.AsyncClient, workspace: Path
 ) -> None:
+    app.state.services.run_executor = fake_run_executor
     use_adapter(
         app,
         scripted(
@@ -106,30 +107,18 @@ async def test_edit_starts_linked_runs_with_stub_events(
     await app.state.services.background.wait_all()
 
     assert first["assistant_message"]["metadata"]["kind"] == "run_started"
-    assert "will not change any files" in first["assistant_message"]["content"]
+    assert "your files are not changed" in first["assistant_message"]["content"]
 
     run1 = (await client.get(f"/api/runs/{first['run_id']}")).json()
     run2 = (await client.get(f"/api/runs/{second['run_id']}")).json()
-    assert run1["status"] == run2["status"] == "completed"
     assert (run1["complexity"], run1["strategy"]) == ("medium", "plan_execute_review")
     assert run2["parent_run_id"] == run1["id"]
     assert run2["triggering_message_id"] == second["user_message"]["id"]
 
     events = (await client.get(f"/api/runs/{run1['id']}/events")).json()
-    assert [e["type"] for e in events] == [
-        "run_created",
-        "router_decided",
-        "run_status_changed",
-        "run_status_changed",
-        "run_status_changed",
-        "run_status_changed",
-        "run_completed",
-    ]
-    statuses = [e["payload"]["status"] for e in events if e["type"] == "run_status_changed"]
-    assert statuses == ["planning", "executing", "reviewing", "completed"]
-    assert all(e["payload"]["stub"] for e in events if e["type"] == "run_status_changed")
-    assert events[-1]["payload"]["stub"] is True
-    assert [e["seq"] for e in events] == list(range(1, 8))
+    assert [e["type"] for e in events][:2] == ["run_created", "router_decided"]
+    assert events[-1]["payload"]["summary"] == "planning=True review=True"
+    assert [e["seq"] for e in events] == list(range(1, len(events) + 1))
 
     async with app.state.sessionmaker() as session:
         decision = await session.scalar(
@@ -144,6 +133,7 @@ async def test_edit_starts_linked_runs_with_stub_events(
 async def test_low_complexity_run_skips_plan_and_review(
     app: FastAPI, client: httpx.AsyncClient, workspace: Path
 ) -> None:
+    app.state.services.run_executor = fake_run_executor
     use_adapter(app, scripted(router=router_json(request_type="code_edit", complexity="low")))
     _, conversation_id = await _conversation(client, workspace)
 
@@ -151,8 +141,30 @@ async def test_low_complexity_run_skips_plan_and_review(
     await app.state.services.background.wait_all()
 
     events = (await client.get(f"/api/runs/{exchange['run_id']}/events")).json()
-    statuses = [e["payload"]["status"] for e in events if e["type"] == "run_status_changed"]
-    assert statuses == ["executing", "completed"]
+    assert events[-1]["payload"]["summary"] == "planning=False review=False"
+
+
+async def test_edit_requires_git(app: FastAPI, client: httpx.AsyncClient, tmp_path: Path) -> None:
+    app.state.services.run_executor = fake_run_executor
+    use_adapter(app, scripted(router=router_json(request_type="code_edit", complexity="low")))
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    _, conversation_id = await _conversation(client, plain)
+
+    exchange = await _send(client, conversation_id, "Rename x to y", "edit")
+
+    assert exchange["run_id"] is None
+    assert exchange["assistant_message"]["metadata"]["kind"] == "error"
+    assert "not a Git repository" in exchange["assistant_message"]["content"]
+    assert (await client.get("/api/runs")).json() == []
+
+    project_id = (await client.get("/api/projects")).json()[0]["id"]
+    init = await client.post(f"/api/projects/{project_id}/git/init")
+    assert init.status_code == 200 and init.json()["git_enabled"] is True
+    assert (await client.post(f"/api/projects/{project_id}/git/init")).status_code == 409
+
+    exchange = await _send(client, conversation_id, "Rename x to y", "edit")
+    assert exchange["run_id"] is not None
 
 
 async def test_ask_mode_blocks_runs_even_for_edit_requests(

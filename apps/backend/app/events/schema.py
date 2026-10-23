@@ -2,8 +2,10 @@
 
 This is the backend/frontend contract for the live event stream. `append_event` validates every
 payload against it, and `export_schema` generates the JSON Schema the renderer's TypeScript
-types are built from. Status: draft until the end of M3, then frozen (changes bump
-SCHEMA_VERSION).
+types are built from.
+
+Status: FROZEN at v1 (end of M3). Backend and frontend develop against it in parallel; any
+change needs agreement from all owners and bumps SCHEMA_VERSION.
 
 Payloads carry `stub: true` when the work they describe was not really performed (M2 worker
 stubs). The UI must label such events instead of presenting them as agent progress.
