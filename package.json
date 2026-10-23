@@ -1,0 +1,18 @@
+{
+  "name": "hex-mind",
+  "version": "0.1.0",
+  "private": true,
+  "description": "H.E.X Mind (Hivemind Execution X): an agent-native IDE with live multi-agent observability",
+  "workspaces": [
+    "apps/desktop"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @hexmind/desktop",
+    "dev:backend": "uv --directory apps/backend run python -m app",
+    "build": "npm run build -w @hexmind/desktop",
+    "typecheck": "npm run typecheck -w @hexmind/desktop",
+    "test": "npm run test -w @hexmind/desktop && npm run test:backend",
+    "test:backend": "uv --directory apps/backend run pytest -q",
+    "lint:backend": "uv --directory apps/backend run ruff check . && uv --directory apps/backend run ruff format --check ."
+  }
+}
