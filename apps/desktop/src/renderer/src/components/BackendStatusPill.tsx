@@ -21,7 +21,7 @@ const TONES: Record<BackendStatus['kind'], 'neutral' | 'success' | 'warning' | '
 function detail(status: BackendStatus): string | undefined {
   switch (status.kind) {
     case 'connected':
-      return `Version ${status.version}`
+      return `Version ${status.health.version}`
     case 'unreachable':
       return status.error
     case 'misconfigured':

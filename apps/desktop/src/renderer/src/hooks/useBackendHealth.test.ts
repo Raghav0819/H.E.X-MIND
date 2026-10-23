@@ -4,14 +4,21 @@ import { checkHealth } from './useBackendHealth'
 
 const config = { url: 'http://127.0.0.1:8765', token: 'secret-token-123456' }
 
+const HEALTH = {
+  status: 'ok',
+  version: '0.1.0',
+  db: 'ok',
+  providers: { ollama: { provider: 'ollama', available: true, model: 'qwen2.5-coder:7b', detail: null } }
+}
+
 function respond(status: number, body: unknown = {}): typeof fetch {
   return vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status }))
 }
 
 describe('checkHealth', () => {
-  it('reports connected with the backend version and sends the bearer token', async () => {
-    const fetchFn = respond(200, { status: 'ok', version: '0.1.0' })
-    await expect(checkHealth(config, fetchFn)).resolves.toEqual({ kind: 'connected', version: '0.1.0' })
+  it('reports connected with the health payload and sends the bearer token', async () => {
+    const fetchFn = respond(200, HEALTH)
+    await expect(checkHealth(config, fetchFn)).resolves.toEqual({ kind: 'connected', health: HEALTH })
     expect(fetchFn).toHaveBeenCalledWith(
       'http://127.0.0.1:8765/api/health',
       expect.objectContaining({ headers: { Authorization: 'Bearer secret-token-123456' } })
@@ -33,8 +40,10 @@ describe('checkHealth', () => {
   })
 
   it('reports unreachable on malformed responses', async () => {
-    const result = await checkHealth(config, respond(200, { status: 'nope' }))
-    expect(result.kind).toBe('unreachable')
+    for (const body of [{ status: 'nope' }, { ...HEALTH, db: 'maybe' }, { ...HEALTH, providers: null }]) {
+      const result = await checkHealth(config, respond(200, body))
+      expect(result.kind).toBe('unreachable')
+    }
   })
 
   it('reports unreachable when the request fails', async () => {

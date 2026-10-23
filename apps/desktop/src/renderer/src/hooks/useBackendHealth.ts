@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { BackendConfig } from '../../../preload/api'
+import type { HealthInfo } from '../lib/api'
 
 export type BackendStatus =
   | { kind: 'connecting' }
-  | { kind: 'connected'; version: string }
+  | { kind: 'connected'; health: HealthInfo }
   | { kind: 'misconfigured' }
   | { kind: 'unauthorized' }
   | { kind: 'unreachable'; error: string }
@@ -12,6 +13,17 @@ export type BackendStatus =
 const CONNECTED_POLL_MS = 5000
 const DISCONNECTED_POLL_MS = 3000
 const REQUEST_TIMEOUT_MS = 3000
+
+function isHealthInfo(body: unknown): body is HealthInfo {
+  const b = body as Partial<HealthInfo> | null
+  return (
+    b?.status === 'ok' &&
+    typeof b.version === 'string' &&
+    (b.db === 'ok' || b.db === 'unavailable') &&
+    typeof b.providers === 'object' &&
+    b.providers !== null
+  )
+}
 
 export async function checkHealth(
   config: BackendConfig,
@@ -26,29 +38,25 @@ export async function checkHealth(
     })
     if (response.status === 401) return { kind: 'unauthorized' }
     if (!response.ok) return { kind: 'unreachable', error: `HTTP ${response.status}` }
-    const body = (await response.json()) as { status?: unknown; version?: unknown }
-    if (body.status !== 'ok' || typeof body.version !== 'string') {
-      return { kind: 'unreachable', error: 'Unexpected health response' }
-    }
-    return { kind: 'connected', version: body.version }
+    const body: unknown = await response.json()
+    if (!isHealthInfo(body)) return { kind: 'unreachable', error: 'Unexpected health response' }
+    return { kind: 'connected', health: body }
   } catch (err) {
     return { kind: 'unreachable', error: err instanceof Error ? err.message : String(err) }
   }
 }
 
 /** Polls the backend health endpoint; `retry` forces an immediate check. */
-export function useBackendHealth(): { status: BackendStatus; retry: () => void } {
+export function useBackendHealth(config: BackendConfig): { status: BackendStatus; retry: () => void } {
   const [status, setStatus] = useState<BackendStatus>({ kind: 'connecting' })
   const [attempt, setAttempt] = useState(0)
-  const configRef = useRef<BackendConfig | null>(null)
 
   useEffect(() => {
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | undefined
 
     const run = async (): Promise<void> => {
-      configRef.current ??= await window.hex.getBackend()
-      const next = await checkHealth(configRef.current)
+      const next = await checkHealth(config)
       if (cancelled) return
       setStatus(next)
       if (next.kind === 'misconfigured') return
@@ -60,7 +68,7 @@ export function useBackendHealth(): { status: BackendStatus; retry: () => void }
       cancelled = true
       clearTimeout(timer)
     }
-  }, [attempt])
+  }, [config, attempt])
 
   const retry = useCallback(() => {
     setStatus({ kind: 'connecting' })

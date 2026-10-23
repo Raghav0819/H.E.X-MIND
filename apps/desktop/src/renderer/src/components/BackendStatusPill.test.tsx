@@ -4,10 +4,12 @@ import { describe, expect, it, vi } from 'vitest'
 import type { BackendStatus } from '../hooks/useBackendHealth'
 import { BackendStatusPill } from './BackendStatusPill'
 
+const HEALTH = { status: 'ok' as const, version: '0.1.0', db: 'ok' as const, providers: {} }
+
 describe('BackendStatusPill', () => {
   it.each<[BackendStatus, string]>([
     [{ kind: 'connecting' }, 'Connecting…'],
-    [{ kind: 'connected', version: '0.1.0' }, 'Backend connected'],
+    [{ kind: 'connected', health: HEALTH }, 'Backend connected'],
     [{ kind: 'misconfigured' }, 'Backend token not configured'],
     [{ kind: 'unauthorized' }, 'Backend rejected token'],
     [{ kind: 'unreachable', error: 'Failed to fetch' }, 'Backend unreachable']
@@ -18,7 +20,7 @@ describe('BackendStatusPill', () => {
 
   it('offers retry only when disconnected', () => {
     const onRetry = vi.fn()
-    const { rerender } = render(<BackendStatusPill status={{ kind: 'connected', version: '0.1.0' }} onRetry={onRetry} />)
+    const { rerender } = render(<BackendStatusPill status={{ kind: 'connected', health: HEALTH }} onRetry={onRetry} />)
     expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument()
 
     rerender(<BackendStatusPill status={{ kind: 'unreachable', error: 'down' }} onRetry={onRetry} />)

@@ -2,11 +2,14 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { App } from './App'
+import { BackendProvider } from './lib/backend'
 import './styles/tokens.css'
 import './styles/app.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <BackendProvider>
+      <App />
+    </BackendProvider>
   </StrictMode>
 )

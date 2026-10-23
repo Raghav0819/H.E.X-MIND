@@ -4,8 +4,12 @@ version = "0.1.0"
 description = "Local FastAPI backend for the H.E.X Mind desktop IDE"
 requires-python = ">=3.11"
 dependencies = [
+    "alembic>=1.20.1",
+    "asyncpg>=0.32.0",
     "fastapi>=0.161.1",
+    "httpx>=0.28.1",
     "pydantic-settings>=2.16.1",
+    "sqlalchemy[asyncio]>=2.1.6",
     "uvicorn[standard]>=0.54.0",
 ]
 
@@ -13,12 +17,16 @@ dependencies = [
 dev = [
     "httpx2>=2.16.0",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "ruff>=0.17.2",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 
 [tool.ruff]
 line-length = 100

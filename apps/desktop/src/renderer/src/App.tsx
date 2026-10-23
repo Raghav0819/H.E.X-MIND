@@ -1,11 +1,11 @@
 import {
   Bot,
-  FolderOpen,
   Files,
+  FolderOpen,
   History,
-  MessageSquare,
   PanelBottom,
   PanelRight,
+  RefreshCw,
   Settings,
   type LucideIcon
 } from 'lucide-react'
@@ -13,7 +13,14 @@ import { useState } from 'react'
 
 import { BackendStatusPill } from './components/BackendStatusPill'
 import { EmptyState, PanelHeader } from './components/Panel'
-import { useBackendHealth, type BackendStatus } from './hooks/useBackendHealth'
+import { EditorArea } from './features/editor/EditorArea'
+import { disposeModel } from './features/editor/monaco'
+import { useEditorTabs } from './features/editor/useEditorTabs'
+import { FileTree } from './features/explorer/FileTree'
+import { Welcome } from './features/workspace/Welcome'
+import { useWorkspace } from './features/workspace/useWorkspace'
+import { useBackendHealth } from './hooks/useBackendHealth'
+import { useBackend } from './lib/backend'
 
 type View = 'explorer' | 'agents' | 'runs' | 'settings'
 
@@ -27,19 +34,26 @@ const VIEWS: { id: View; label: string; icon: LucideIcon }[] = [
 const BOTTOM_TABS = ['Problems', 'Tasks', 'Agent Events', 'Logs'] as const
 type BottomTab = (typeof BOTTOM_TABS)[number]
 
-const SIDEBAR_EMPTY: Record<View, string> = {
-  explorer: 'No workspace open',
+const SIDEBAR_EMPTY: Record<Exclude<View, 'explorer'>, string> = {
   agents: 'No agents running',
   runs: 'No runs yet',
   settings: 'Settings are not available yet'
 }
 
 export function App() {
-  const { status, retry } = useBackendHealth()
+  const { config, api } = useBackend()
+  const { status, retry } = useBackendHealth(config)
+  const workspace = useWorkspace(api, status.kind === 'connected')
+  const project = workspace.project
+  const editor = useEditorTabs(api, project?.id ?? null, disposeModel)
+
   const [view, setView] = useState<View>('explorer')
   const [rightOpen, setRightOpen] = useState(true)
   const [bottomOpen, setBottomOpen] = useState(true)
   const [bottomTab, setBottomTab] = useState<BottomTab>('Problems')
+  const [treeRefresh, setTreeRefresh] = useState(0)
+
+  const viewLabel = VIEWS.find((v) => v.id === view)?.label ?? ''
 
   return (
     <div className="app" data-right={rightOpen} data-bottom={bottomOpen}>
@@ -50,7 +64,14 @@ export function App() {
           </span>
           <span className="brand-name">H.E.X Mind</span>
           <span className="topbar__divider" aria-hidden="true" />
-          <span className="topbar__workspace">No workspace</span>
+          <span className="topbar__workspace" title={project?.workspace_path}>
+            {project ? project.name : 'No workspace'}
+          </span>
+          {project && !project.git_enabled && (
+            <span className="badge" title="Agent edits will require Git (milestone M3)">
+              No Git
+            </span>
+          )}
         </div>
         <div className="topbar__actions">
           <BackendStatusPill status={status} onRetry={retry} />
@@ -93,20 +114,70 @@ export function App() {
         ))}
       </nav>
 
-      <aside className="sidebar" aria-label={VIEWS.find((v) => v.id === view)?.label}>
-        <PanelHeader title={VIEWS.find((v) => v.id === view)?.label ?? ''} />
-        <EmptyState title={SIDEBAR_EMPTY[view]} />
+      <aside className="sidebar" aria-label={viewLabel}>
+        {view === 'explorer' ? (
+          <>
+            <PanelHeader
+              title={project ? project.name : 'Explorer'}
+              actions={
+                <>
+                  {project && (
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label="Refresh explorer"
+                      title="Refresh"
+                      onClick={() => setTreeRefresh((n) => n + 1)}
+                    >
+                      <RefreshCw size={14} />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Open folder"
+                    title="Open folder"
+                    disabled={status.kind !== 'connected'}
+                    onClick={() => void workspace.pickAndOpen()}
+                  >
+                    <FolderOpen size={14} />
+                  </button>
+                </>
+              }
+            />
+            {project ? (
+              <FileTree
+                api={api}
+                projectId={project.id}
+                activePath={editor.state.active}
+                onOpenFile={(path) => void editor.openFile(path)}
+                refreshKey={treeRefresh}
+              />
+            ) : (
+              <EmptyState title="No workspace open" />
+            )}
+          </>
+        ) : (
+          <>
+            <PanelHeader title={viewLabel} />
+            <EmptyState title={SIDEBAR_EMPTY[view]} />
+          </>
+        )}
       </aside>
 
       <main className="editor">
-        <Welcome status={status} />
+        {project && editor.state.tabs.length > 0 ? (
+          <EditorArea projectId={project.id} editor={editor} />
+        ) : (
+          <Welcome status={status} workspace={workspace} />
+        )}
       </main>
 
       {rightOpen && (
         <aside className="rightpanel" aria-label="Agent chat">
           <PanelHeader title="Agent Chat" />
           <EmptyState title="Chat is not available yet">
-            Open a workspace to start a conversation with the agents.
+            Agent chat arrives in a later milestone.
           </EmptyState>
         </aside>
       )}
@@ -132,37 +203,6 @@ export function App() {
           </div>
         </section>
       )}
-    </div>
-  )
-}
-
-function Welcome({ status }: { status: BackendStatus }) {
-  return (
-    <div className="welcome">
-      <h1 className="welcome__title">H.E.X Mind</h1>
-      <p className="welcome__subtitle">Agent-native IDE with live multi-agent observability</p>
-      <div className="welcome__actions">
-        <button type="button" className="button button--primary" disabled title="Not available yet">
-          <FolderOpen size={16} />
-          Open folder
-        </button>
-        <button type="button" className="button" disabled title="Not available yet">
-          <MessageSquare size={16} />
-          New conversation
-        </button>
-      </div>
-      <dl className="readiness">
-        <div className="readiness__row">
-          <dt>Backend</dt>
-          <dd data-ok={status.kind === 'connected'}>
-            {status.kind === 'connected' ? `Ready (v${status.version})` : 'Not ready'}
-          </dd>
-        </div>
-        <div className="readiness__row">
-          <dt>Model providers</dt>
-          <dd>Not configured</dd>
-        </div>
-      </dl>
     </div>
   )
 }
