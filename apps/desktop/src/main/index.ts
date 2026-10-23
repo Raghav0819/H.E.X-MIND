@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 
-import { app, BrowserWindow, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 
 import { IPC, type AppInfo, type BackendConfig } from '../preload/api'
 
@@ -41,6 +41,16 @@ function registerIpc(): void {
   ipcMain.handle(IPC.appInfo, (event): AppInfo => {
     assertTrustedSender(event)
     return { version: app.getVersion(), platform: process.platform }
+  })
+  // Main only picks the folder; the backend validates it and owns all file access.
+  ipcMain.handle(IPC.pickWorkspace, async (event): Promise<string | null> => {
+    assertTrustedSender(event)
+    const owner = BrowserWindow.fromWebContents(event.sender)
+    const options = { title: 'Open workspace', properties: ['openDirectory' as const] }
+    const result = owner
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options)
+    return result.canceled ? null : (result.filePaths[0] ?? null)
   })
 }
 

@@ -23,6 +23,7 @@
 | 10 | Sections 10/18 (security) and 15/20 (DoD) were duplicated. | Merged into §7 and §11. |
 | 11 | Explicit chat mode and the Router could disagree. | **The user's explicit mode wins.** In Ask mode no file writes can happen, whatever the Router says. |
 | 12 | "Run tests in isolation" had no concrete mechanism. | Docker sandbox with no network, CPU/mem/pid/time limits, and **allowlisted commands from a project profile**, never LLM-generated commands. See §7. |
+| 13 | No supervision view beyond the game map. | Adopted from [Orchestrator.inc](https://github.com/OrchestratorInc/agent-orchestrator), our reference design: **attention columns** (Working / In review / Needs you / Ready to apply) and a **"Needs you" queue**, both derived from backend state. See §3.5. We deliberately do **not** adopt a worktree per task (it needs a merge step; too much for 8 weeks) or wrapping external agent harnesses (Claude Code, Codex…), which would block per-call telemetry, provider comparison and the CrewAI course requirement. |
 
 ---
 
@@ -146,6 +147,33 @@ There are four separate sources, each with its own token budget (defaults, tunab
 
 Files are always re-read from disk at build time. History never stands in for current code. The rolling summary is regenerated after each completed run. Secrets are redacted before anything reaches a model (`.env*` files are excluded entirely).
 
+### 3.5 Attention model (supervision)
+
+**Columns.** Every run sits in one attention column. The **backend derives it** from authoritative run, task and review state; the renderer never computes it.
+
+| Column | Derived when |
+|---|---|
+| Working | run status ∈ {queued, routing, planning, executing, checking} |
+| In review | run status = reviewing |
+| Needs you | the run has at least one open attention item (below); this takes precedence over the other columns |
+| Ready to apply | status = awaiting_approval, the latest review is `approved`, and all checks passed |
+| Done (hidden by default) | applied / rejected / reverted / cancelled / failed with no open items |
+
+**Attention items** form the "Needs you" queue. Each item is `{run_id, task_id?, kind, message, created_seq}`.
+
+| Kind | Raised when | Resolved when |
+|---|---|---|
+| `apply_conflict` | an approved file's workspace hash ≠ `base_hash` (§5 step 6) | the file is reloaded, overwritten or rejected |
+| `task_blocked` | a task hits `blocked` (retries or review loops exhausted, or a dependency failed) | the task is retried or the run is cancelled |
+| `clarification_requested` | the Router policy returns a clarification | the user replies in the conversation |
+| `provider_unavailable` | no eligible provider remains after fallback | a later call succeeds or the run is cancelled |
+| `run_failed` | the run enters `failed` | the user dismisses it or retries |
+| `approval_pending_with_findings` | the run is `awaiting_approval` while the reviewer has open findings | the run is approved, rejected or re-reviewed |
+
+**Rules**
+- **No new event types.** Items are derived from existing events (§4.1) and current state, so they survive reconnects through the snapshot like everything else.
+- **One function.** `derive_attention(run, tasks, reviews, file_changes, latest_events)` in `apps/backend/app/attention/` is pure and unit-tested. Its output is embedded in the run snapshot and run list, and served by `GET /api/attention`.
+
 ---
 
 ## 4. Contracts (freeze early; owners develop against them in parallel)
@@ -185,6 +213,8 @@ GET  /api/conversations/{id}/messages
 POST /api/conversations/{id}/messages    {content, mode}
 GET  /api/runs?project_id=&q=            (history)
 GET  /api/runs/{id}  | /snapshot | /events?after_seq= | /metrics | /diff
+                                         (run list and snapshot include the derived `attention` column + items, §3.5)
+GET  /api/attention?project_id=          → open "Needs you" items across the project's runs
 POST /api/runs/{id}/approve              {files?: [...]}   → apply
 POST /api/runs/{id}/reject
 POST /api/runs/{id}/revert
@@ -341,13 +371,15 @@ Each milestone ends with: code runs, tests/type checks/builds pass, a short repo
 - Compact agent status list + task board (the primary view).
 - Phaser scene (lazy-loaded): stations, agents, task tiles, transitions driven only by events, honoring reduced motion.
 - Metrics panel: routing, provider/model, tokens, cost, latency, retries, checks, review.
-- Tests: reconciliation unit tests (duplicates, out-of-order, gaps, reconnect) plus a replay test that feeds a recorded event log and checks the final UI state matches the snapshot.
+- Attention model (§3.5): `derive_attention` + `GET /api/attention`. The **attention board** (Working / In review / Needs you / Ready to apply) becomes the primary run view next to the status list. Add a **Needs you** tab in the bottom panel and a badge count in the top bar.
+- Tests: reconciliation unit tests (duplicates, out-of-order, gaps, reconnect) plus a replay test that feeds a recorded event log and checks the final UI state, **including attention columns**, matches the snapshot. Add a unit-test table for every attention kind (raise and resolve).
 - **Exit:** the map matches backend state during a real run and after a forced WS disconnect.
 
 ### M6 — Context-aware IDE loop (Week 6)
 - Diff review (per-file approve/reject), apply with conflict detection, revert, cancel.
 - Follow-up runs that use `parent_run_id` and prior-run context. Run history with search.
 - Agent/task detail panels (logs, LLM calls, linked changes). Settings (providers, Ollama health, theme, reduced motion, diagnostics).
+- Needs-you items get direct actions: `apply_conflict` → Reload / Overwrite / Reject file; `clarification_requested` → Answer (focuses the chat); `task_blocked` → Retry / Cancel run.
 - **Exit:** the demo script runs end to end: build the to-do app, approve, then "dark theme for the login page", then "swap Google login for GitHub". Each step is an incremental, reviewable and revertible run.
 
 ### M7 — Evaluation (Week 7)
@@ -371,8 +403,8 @@ Each milestone ends with: code runs, tests/type checks/builds pass, a short repo
 | 2 | CrewAI `BaseLLM` spike; MCP server skeleton | Router + ContextManager + LangGraph skeleton; start labels | Chat panel, modes, conversation UI; event TS types |
 | 3 | Planner/Coder/Reviewer; worktree; sandbox; RAG | Graph wiring to workers; route policy | Task board + status list from real events; diff viewer (read-only) |
 | 4 | Retry/review loops; self-logs | Groq/Gemini/Ollama, quota, fallback, fault tests; benchmark set | Event store + reconciliation; metrics panel |
-| 5 | Parallel disjoint-file scheduling; cancellation | Pricing/cost; eval runner skeleton | Phaser map; reconnect tests |
-| 6 | Apply/revert backend; conflict detection | Judge prompt + rubric; sklearn baseline | Approve/reject/revert UI; run history; settings |
+| 5 | Parallel disjoint-file scheduling; cancellation | Pricing/cost; eval runner skeleton; **`derive_attention` + `/api/attention`** | Phaser map; reconnect tests; **attention board + Needs-you tab** |
+| 6 | Apply/revert backend; conflict detection | Judge prompt + rubric; sklearn baseline | Approve/reject/revert UI; run history; settings; **Needs-you actions** |
 | 7 | Bug fixing from benchmark runs | **Run 42 benchmarks**; analysis | Detail panels; polish; demo script |
 | 8 | Stress + security | Report | Packaging, E2E, demo |
 
@@ -392,6 +424,7 @@ Shared: the event schema (frozen at end of week 3), REST contracts (§4.2), and 
 - [ ] Ollama, Groq and Gemini sit behind one interface, and the quota/timeout fallback is tested.
 - [ ] Diffs can be reviewed, applied with conflict detection, and reverted.
 - [ ] The map and metrics are driven only by real events and survive reconnects (replay test).
+- [ ] Attention columns and the Needs-you queue are derived only from backend state and covered by tests for every item kind.
 - [ ] At least 40 benchmark runs are logged, with PEAS metrics, a judge plus human spot checks, and the sklearn vs. LLM Router comparison on held-out data.
 - [ ] Tests cover routing, fallback, atomic claims, path guard, conversation/run linkage, event reconciliation, apply/revert and critical UI states.
 - [ ] The README covers setup, env vars, commands, architecture, limitations and the demo flow.
@@ -406,7 +439,7 @@ Shared: the event schema (frozen at end of week 3), REST contracts (§4.2), and 
 | R2 | A 7B local model is too weak for multi-file edits. | That's an expected finding, not a failure. Keep the Ollama route to low-complexity tasks by default and report it. |
 | R3 | Groq/Gemini free-tier limits during the benchmark. | Quota tracker, spread runs over days, cache nothing that would distort results. |
 | R4 | Docker bind-mount speed on Windows. | Keep worktrees on a local NTFS path and pre-bake runner images with deps for the demo app. |
-| R5 | UI scope creep (map polish). | The status list and task board come first. The map stays secondary and time-boxed. |
+| R5 | UI scope creep (map polish). | The status list, attention board and task board come first. The map stays secondary and time-boxed. The attention model adds no event types, so it doesn't widen the frozen contract. |
 | R6 | Packaging Postgres with the desktop app. | Out of scope. Document that Compose is required. |
 
 ---

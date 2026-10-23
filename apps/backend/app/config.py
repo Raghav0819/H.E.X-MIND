@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     port: int = 8765
     cors_origins: list[str] = ["http://localhost:5173"]
 
+    database_url: str = "postgresql+asyncpg://hexmind:hexmind@127.0.0.1:5433/hexmind"
+
+    ollama_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen2.5-coder:7b"
+
+    # Files larger than this are not opened in the editor.
+    max_editor_file_bytes: int = 2 * 1024 * 1024
+
     @field_validator("host")
     @classmethod
     def host_must_be_loopback(cls, value: str) -> str:

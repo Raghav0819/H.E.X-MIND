@@ -1,25 +1,21 @@
+import httpx
 import pytest
-from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app import __version__
 from app.config import Settings
-from app.main import create_app
-
-TOKEN = "test-token-0123456789abcdef"
-ORIGIN = "http://localhost:5173"
+from tests.conftest import ORIGIN, TOKEN
 
 
-@pytest.fixture
-def client() -> TestClient:
-    settings = Settings(api_token=TOKEN, cors_origins=[ORIGIN], _env_file=None)
-    return TestClient(create_app(settings))
-
-
-def test_health_with_valid_token(client: TestClient) -> None:
-    response = client.get("/api/health", headers={"Authorization": f"Bearer {TOKEN}"})
+async def test_health_reports_components(client: httpx.AsyncClient) -> None:
+    response = await client.get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": __version__}
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["version"] == __version__
+    assert body["db"] == "ok"
+    # The test settings point Ollama at a closed port, so it must be reported as unavailable.
+    assert body["providers"]["ollama"]["available"] is False
 
 
 @pytest.mark.parametrize(
@@ -31,16 +27,18 @@ def test_health_with_valid_token(client: TestClient) -> None:
         {"Authorization": f"Basic {TOKEN}"},
     ],
 )
-def test_health_rejects_missing_or_invalid_token(
-    client: TestClient, headers: dict[str, str]
+async def test_api_rejects_missing_or_invalid_token(
+    client: httpx.AsyncClient, headers: dict[str, str]
 ) -> None:
-    response = client.get("/api/health", headers=headers)
-    assert response.status_code == 401
-    assert response.headers["www-authenticate"] == "Bearer"
+    client.headers.pop("Authorization")
+    for path in ("/api/health", "/api/projects", "/api/providers"):
+        response = await client.get(path, headers=headers)
+        assert response.status_code == 401, path
+        assert response.headers["www-authenticate"] == "Bearer"
 
 
-def test_cors_preflight_allows_renderer_origin(client: TestClient) -> None:
-    response = client.options(
+async def test_cors_preflight_allows_renderer_origin(client: httpx.AsyncClient) -> None:
+    response = await client.options(
         "/api/health",
         headers={
             "Origin": ORIGIN,
@@ -52,11 +50,8 @@ def test_cors_preflight_allows_renderer_origin(client: TestClient) -> None:
     assert response.headers["access-control-allow-origin"] == ORIGIN
 
 
-def test_cors_rejects_unknown_origin(client: TestClient) -> None:
-    response = client.get(
-        "/api/health",
-        headers={"Origin": "https://evil.example", "Authorization": f"Bearer {TOKEN}"},
-    )
+async def test_cors_rejects_unknown_origin(client: httpx.AsyncClient) -> None:
+    response = await client.get("/api/health", headers={"Origin": "https://evil.example"})
     assert "access-control-allow-origin" not in response.headers
 
 

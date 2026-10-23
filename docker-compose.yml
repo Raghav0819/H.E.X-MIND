@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hexmind
+      POSTGRES_PASSWORD: ${HEXMIND_DB_PASSWORD:-hexmind}
+      POSTGRES_DB: hexmind
+    # Port 5433 avoids clashing with a locally installed PostgreSQL; loopback only.
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hexmind -d hexmind"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:

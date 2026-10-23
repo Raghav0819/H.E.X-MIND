@@ -7,8 +7,11 @@
     "apps/desktop"
   ],
   "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
     "dev": "npm run dev -w @hexmind/desktop",
     "dev:backend": "uv --directory apps/backend run python -m app",
+    "db:up": "docker compose up -d --wait",
+    "db:migrate": "uv --directory apps/backend run alembic upgrade head",
     "build": "npm run build -w @hexmind/desktop",
     "typecheck": "npm run typecheck -w @hexmind/desktop",
     "test": "npm run test -w @hexmind/desktop && npm run test:backend",

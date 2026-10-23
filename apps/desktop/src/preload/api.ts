@@ -14,9 +14,12 @@ export interface AppInfo {
 export interface HexApi {
   getBackend(): Promise<BackendConfig>
   appInfo(): Promise<AppInfo>
+  /** Opens the native folder picker; resolves to the absolute path, or null if cancelled. */
+  pickWorkspace(): Promise<string | null>
 }
 
 export const IPC = {
   getBackend: 'hex:get-backend',
-  appInfo: 'hex:app-info'
+  appInfo: 'hex:app-info',
+  pickWorkspace: 'hex:pick-workspace'
 } as const
