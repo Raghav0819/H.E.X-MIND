@@ -5,7 +5,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import conversations, health, projects, providers, runs
+from app.api import conversations, health, projects, providers, runs, tasks
 from app.auth import require_token
 from app.chat.service import ChatService
 from app.config import Settings, get_settings
@@ -13,6 +13,7 @@ from app.context.manager import ContextManager
 from app.db.session import create_engine, create_sessionmaker
 from app.graph.background import BackgroundTasks
 from app.graph.services import Services
+from app.memory.store import Memory, OllamaEmbedding
 from app.providers.ollama import OllamaAdapter
 from app.providers.router import ProviderRouter
 
@@ -22,14 +23,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     engine = create_engine(settings.database_url)
     sessionmaker = create_sessionmaker(engine)
     ollama = OllamaAdapter(
-        settings.ollama_url, settings.ollama_model, num_ctx=settings.ollama_num_ctx
+        settings.ollama_url,
+        settings.ollama_model,
+        num_ctx=settings.ollama_num_ctx,
+        timeout_s=settings.ollama_timeout_s,
     )
+    memory = None
+    if settings.memory_enabled:
+        memory = Memory(
+            settings.data_dir / "chroma",
+            OllamaEmbedding(settings.ollama_url, settings.embedding_model),
+        )
     services = Services(
         settings=settings,
         sessionmaker=sessionmaker,
         providers=ProviderRouter([ollama], sessionmaker),
         context=ContextManager(settings.context_budget_tokens),
         background=BackgroundTasks(),
+        memory=memory,
     )
 
     @asynccontextmanager
@@ -54,6 +65,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
 
-    for module in (health, projects, runs, providers, conversations):
+    for module in (health, projects, runs, providers, conversations, tasks):
         app.include_router(module.router, prefix="/api", dependencies=[Depends(require_token)])
     return app

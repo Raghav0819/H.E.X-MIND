@@ -9,6 +9,8 @@ export interface Workspace {
   /** Shows the native folder picker, then registers the chosen folder with the backend. */
   pickAndOpen: () => Promise<void>
   open: (workspacePath: string) => Promise<void>
+  /** Initializes Git for the open project (agent runs need it). */
+  initGit: () => Promise<void>
 }
 
 export function useWorkspace(api: ApiClient, backendReady: boolean): Workspace {
@@ -41,5 +43,15 @@ export function useWorkspace(api: ApiClient, backendReady: boolean): Workspace {
     if (path) await open(path)
   }, [open])
 
-  return { project, recent, error, pickAndOpen, open }
+  const initGit = useCallback(async () => {
+    if (!project) return
+    setError(null)
+    try {
+      setProject(await api.post<Project>(`/projects/${project.id}/git/init`))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }, [api, project])
+
+  return { project, recent, error, pickAndOpen, open, initGit }
 }

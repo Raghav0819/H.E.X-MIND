@@ -115,3 +115,62 @@ class MessageExchangeOut(BaseModel):
     user_message: MessageOut
     assistant_message: MessageOut
     run_id: uuid.UUID | None
+
+
+class TaskCreate(BaseModel):
+    run_id: uuid.UUID
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(min_length=1)
+    acceptance_criteria: list[str] = []
+    target_files: list[str] = []
+    depends_on: list[uuid.UUID] = []
+    priority: int = 0
+    complexity: Literal["low", "medium", "high"] | None = None
+
+
+class TaskOut(ORMModel):
+    id: uuid.UUID
+    run_id: uuid.UUID
+    title: str
+    description: str
+    acceptance_criteria: list[str]
+    target_files: list[str]
+    status: str
+    complexity: str | None
+    priority: int
+    claimed_by: str | None
+    attempts: int
+    max_attempts: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class TaskClaim(BaseModel):
+    worker: str = Field(min_length=1, max_length=64)
+
+
+class Finding(BaseModel):
+    file: str | None = None
+    line: int | None = None
+    severity: Literal["info", "minor", "major", "critical"] = "minor"
+    message: str
+
+
+class TaskReview(BaseModel):
+    verdict: Literal["approved", "changes_requested", "blocked"]
+    findings: list[Finding] = []
+
+
+class FileDiffOut(BaseModel):
+    path: str
+    change_type: Literal["added", "modified", "deleted"]
+    status: str
+    original: str | None
+    modified: str | None
+    diff: str
+
+
+class RunDiffOut(BaseModel):
+    run_id: uuid.UUID
+    base_commit: str | None
+    files: list[FileDiffOut]

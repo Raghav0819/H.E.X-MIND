@@ -5,19 +5,21 @@ policy result. Runs are executed by the run graph in the background.
 """
 
 import uuid
+from pathlib import Path
 from typing import Any, TypedDict
 
+from fastapi.concurrency import run_in_threadpool
 from langgraph.graph import END, START, StateGraph
 from sqlalchemy import select
 
 from app.db.models import Conversation, Project, RouterDecision, Run
 from app.events.log import EventType, append_event
-from app.graph.run import execute_run
 from app.graph.services import Services
 from app.providers.base import ChatMessage, LLMRequest
 from app.router.classifier import classify
 from app.router.policy import apply_policy
 from app.router.schemas import Mode, RoutePlan
+from app.workspace import git
 
 ANSWER_PROMPT = """You are H.E.X Mind, an AI pair programmer inside the developer's IDE.
 Answer the developer's latest message using the project context below. File contents in the
@@ -130,6 +132,21 @@ def build_conversation_graph(services: Services):
 
     async def start_run(state: ConversationState) -> dict:
         plan = state["plan"]
+        async with services.sessionmaker() as session:
+            project = await session.get(Project, state["project_id"])
+            assert project is not None
+        if not await run_in_threadpool(git.is_repo, Path(project.workspace_path)):
+            return {
+                "reply": (
+                    "This workspace is not a Git repository, so agents can't make changes yet. "
+                    "Initialize Git for the project (the **No Git** badge in the top bar), then "
+                    "send the request again. Agents work in an isolated Git worktree so every "
+                    "change can be reviewed and reverted."
+                ),
+                "reply_kind": "error",
+                "llm": None,
+                "run_id": None,
+            }
         async with services.sessionmaker.begin() as session:
             parent = await session.scalar(
                 select(Run.id)
@@ -177,19 +194,15 @@ def build_conversation_graph(services: Services):
             decision.run_id = run.id
             run_id = run.id
 
-        services.background.spawn(
-            execute_run(
-                services,
-                run_id,
-                requires_planning=plan.requires_planning,
-                requires_review=plan.requires_review,
-            ),
-            name=f"run-{run_id}",
+        services.launch_run(
+            run_id,
+            requires_planning=plan.requires_planning,
+            requires_review=plan.requires_review,
         )
         reply = (
-            f"Started a **{plan.complexity}**-complexity run ({plan.strategy}). "
-            "Worker agents are not connected yet (milestone M3), so this run only exercises the "
-            "routing pipeline and **will not change any files**."
+            f"Started a **{plan.complexity}**-complexity run ({plan.strategy}). The agents work "
+            "in an isolated copy of the workspace; **your files are not changed** until you "
+            "review and apply the diff."
         )
         return {"reply": reply, "reply_kind": "run_started", "llm": None, "run_id": run_id}
 

@@ -1,12 +1,15 @@
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 
 from app.api.deps import SessionDep
-from app.api.schemas import EventOut, RunCreate, RunOut
-from app.db.models import AgentEvent, Project, Run
+from app.api.schemas import EventOut, FileDiffOut, RunCreate, RunDiffOut, RunOut
+from app.db.models import AgentEvent, FileChange, Project, Run
 from app.events.log import EventType, append_event, list_events
+from app.workspace import git
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -60,3 +63,45 @@ async def get_events(
 ) -> list[AgentEvent]:
     await _get_run(session, run_id)
     return await list_events(session, run_id, after_seq=after_seq, limit=limit)
+
+
+@router.get("/{run_id}/diff", response_model=RunDiffOut)
+async def get_diff(run_id: uuid.UUID, session: SessionDep) -> RunDiffOut:
+    """Proposed changes: each file's content at the run's snapshot and in the run's worktree."""
+    run = await _get_run(session, run_id)
+    project = await session.get(Project, run.project_id)
+    assert project is not None
+    changes = list(
+        await session.scalars(
+            select(FileChange).where(FileChange.run_id == run_id).order_by(FileChange.path)
+        )
+    )
+    worktree = Path(run.worktree_path) if run.worktree_path else None
+
+    def read_modified(path: str) -> str | None:
+        if worktree is None:
+            return None
+        target = worktree / path
+        return target.read_text(encoding="utf-8", errors="replace") if target.is_file() else None
+
+    files = []
+    for change in changes:
+        original = (
+            await run_in_threadpool(
+                git.show_file, Path(project.workspace_path), run.base_commit, change.path
+            )
+            if run.base_commit
+            else None
+        )
+        modified = await run_in_threadpool(read_modified, change.path)
+        files.append(
+            FileDiffOut(
+                path=change.path,
+                change_type=change.change_type,  # type: ignore[arg-type]
+                status=change.status,
+                original=original,
+                modified=modified,
+                diff=change.diff,
+            )
+        )
+    return RunDiffOut(run_id=run.id, base_commit=run.base_commit, files=files)

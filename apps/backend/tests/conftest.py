@@ -24,6 +24,7 @@ from app.db.models import Base
 from app.main import create_app
 from app.providers.base import Completion, LLMRequest, ProviderHealth
 from app.providers.router import ProviderRouter
+from app.workspace import git
 
 TOKEN = "test-token-0123456789abcdef"
 ORIGIN = "http://localhost:5173"
@@ -53,9 +54,11 @@ def migrated_database() -> str:
 
 
 @pytest.fixture
-def settings() -> Settings:
+def settings(tmp_path: Path) -> Settings:
     return Settings(
         api_token=TOKEN,
+        data_dir=tmp_path / "data",
+        memory_enabled=False,
         cors_origins=[ORIGIN],
         database_url=TEST_DATABASE_URL,
         # Nothing listens on the discard port: the real Ollama is never used by default.
@@ -91,8 +94,7 @@ def workspace(tmp_path: Path) -> Path:
     # Bytes, not text: write_text would translate "\n" to "\r\n" on Windows.
     (root / "src" / "app.ts").write_bytes(b"export const x = 1\n")
     (root / "README.md").write_bytes(b"# demo\n")
-    (root / ".git").mkdir()
-    (root / ".git" / "HEAD").write_bytes(b"ref: refs/heads/main\n")
+    git.init_repo(root)
     return root
 
 
@@ -158,3 +160,19 @@ def use_adapter(app: FastAPI, adapter: ScriptedAdapter) -> None:
     router = ProviderRouter([adapter], app.state.sessionmaker, sleep=no_sleep)
     app.state.services.providers = router
     app.state.provider_router = router
+
+
+async def fake_run_executor(services, run_id, *, requires_planning: bool, requires_review: bool):
+    """Stands in for the agent workflow in conversation-level tests: records the flags it was
+    launched with and completes the run."""
+    from app.events.log import EventType, append_event
+    from app.graph.run import set_status
+
+    await set_status(services, run_id, "completed", finished=True)
+    async with services.sessionmaker.begin() as session:
+        await append_event(
+            session,
+            run_id,
+            EventType.RUN_COMPLETED,
+            payload={"summary": f"planning={requires_planning} review={requires_review}"},
+        )

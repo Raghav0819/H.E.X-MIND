@@ -13,6 +13,9 @@ _RESERVED_NAMES = frozenset(
 
 # Never writable through the editor API, even inside the workspace.
 _WRITE_PROTECTED_DIRS = frozenset({".git"})
+# Agents additionally may not touch the project profile (it defines which commands the
+# sandbox runs), dependencies, or secrets.
+_AGENT_PROTECTED_DIRS = _WRITE_PROTECTED_DIRS | {".hexmind", "node_modules"}
 
 
 class PathViolation(ValueError):
@@ -43,10 +46,21 @@ def normalize_relative(rel: str) -> PurePosixPath:
     return PurePosixPath(*parts)
 
 
-def resolve_in_workspace(root: Path, rel: str, *, for_write: bool = False) -> Path:
-    """Resolve `rel` under `root`, following symlinks, and reject anything outside it."""
+def resolve_in_workspace(
+    root: Path, rel: str, *, for_write: bool = False, agent: bool = False
+) -> Path:
+    """Resolve `rel` under `root`, following symlinks, and reject anything outside it.
+
+    `agent=True` applies the stricter policy used for agent tool calls (reads and writes).
+    """
     normalized = normalize_relative(rel)
-    if for_write and any(part.lower() in _WRITE_PROTECTED_DIRS for part in normalized.parts):
+    lowered = [part.lower() for part in normalized.parts]
+    if agent:
+        if any(part in _AGENT_PROTECTED_DIRS for part in lowered):
+            raise PathViolation(f"'{normalized}' is not accessible to agents")
+        if lowered and lowered[-1].startswith(".env"):
+            raise PathViolation(f"'{normalized}' may contain secrets")
+    if for_write and any(part in _WRITE_PROTECTED_DIRS for part in lowered):
         raise PathViolation(f"'{normalized}' is write-protected")
 
     root_real = root.resolve(strict=True)

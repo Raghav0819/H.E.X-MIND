@@ -16,7 +16,7 @@ from app.api.schemas import (
     TreeEntryOut,
 )
 from app.db.models import Project
-from app.workspace import files
+from app.workspace import files, git
 from app.workspace.paths import PathViolation
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -72,6 +72,25 @@ async def open_project(body: ProjectCreate, session: SessionDep) -> Project:
 @router.get("/{project_id}", response_model=ProjectOut)
 async def get_project(project_id: uuid.UUID, session: SessionDep) -> Project:
     return await _get_project(session, project_id)
+
+
+@router.post("/{project_id}/git/init", response_model=ProjectOut)
+async def init_git(project_id: uuid.UUID, session: SessionDep) -> Project:
+    """Initialize a Git repository with one commit of the current files (explicit user action).
+    Agent runs require Git so their changes stay isolated and revertible."""
+    project = await _get_project(session, project_id)
+    root = Path(project.workspace_path)
+    if await run_in_threadpool(git.is_repo, root):
+        raise HTTPException(status.HTTP_409_CONFLICT, "the workspace is already a Git repository")
+    try:
+        await run_in_threadpool(git.init_repo, root)
+    except git.GitError as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from None
+    project.git_enabled = True
+    project.updated_at = func.clock_timestamp()
+    await session.flush()
+    await session.refresh(project)
+    return project
 
 
 @router.get("/{project_id}/tree", response_model=list[TreeEntryOut])

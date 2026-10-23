@@ -19,7 +19,9 @@ import { EditorArea } from './features/editor/EditorArea'
 import { disposeModel } from './features/editor/monaco'
 import { useEditorTabs } from './features/editor/useEditorTabs'
 import { FileTree } from './features/explorer/FileTree'
+import { DiffView } from './features/runs/DiffView'
 import { RunEventsPanel } from './features/runs/RunEventsPanel'
+import { TasksPanel } from './features/runs/TasksPanel'
 import { Welcome } from './features/workspace/Welcome'
 import { useWorkspace } from './features/workspace/useWorkspace'
 import { useBackendHealth } from './hooks/useBackendHealth'
@@ -57,6 +59,7 @@ export function App() {
   const [bottomTab, setBottomTab] = useState<BottomTab>('Problems')
   const [treeRefresh, setTreeRefresh] = useState(0)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+  const [diffRunId, setDiffRunId] = useState<string | null>(null)
 
   const openRun = (runId: string) => {
     setSelectedRunId(runId)
@@ -86,9 +89,22 @@ export function App() {
             {project ? project.name : 'No workspace'}
           </span>
           {project && !project.git_enabled && (
-            <span className="badge" title="Agent edits will require Git (milestone M3)">
-              No Git
-            </span>
+            <button
+              type="button"
+              className="badge badge--button"
+              title="Agents need Git to work in an isolated, revertible copy. Click to initialize."
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Initialize a Git repository in ${project.workspace_path} and commit the current files?`
+                  )
+                ) {
+                  void workspace.initGit()
+                }
+              }}
+            >
+              No Git: initialize
+            </button>
           )}
         </div>
         <div className="topbar__actions">
@@ -184,7 +200,9 @@ export function App() {
       </aside>
 
       <main className="editor">
-        {project && editor.state.tabs.length > 0 ? (
+        {diffRunId ? (
+          <DiffView api={api} runId={diffRunId} onClose={() => setDiffRunId(null)} />
+        ) : project && editor.state.tabs.length > 0 ? (
           <EditorArea projectId={project.id} editor={editor} />
         ) : (
           <Welcome status={status} workspace={workspace} />
@@ -221,7 +239,9 @@ export function App() {
           </div>
           <div className="bottompanel__body" role="tabpanel" aria-label={bottomTab}>
             {bottomTab === 'Agent Events' ? (
-              <RunEventsPanel api={api} runId={selectedRunId} />
+              <RunEventsPanel api={api} runId={selectedRunId} onReview={setDiffRunId} />
+            ) : bottomTab === 'Tasks' ? (
+              <TasksPanel api={api} runId={selectedRunId} />
             ) : (
               <EmptyState title={`No ${bottomTab.toLowerCase()} to show`} />
             )}

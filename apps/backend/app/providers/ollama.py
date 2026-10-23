@@ -57,6 +57,8 @@ class OllamaAdapter:
         }
         if request.json_schema is not None:
             body["format"] = request.json_schema
+        if request.stop:
+            body["options"]["stop"] = request.stop  # type: ignore[index]
 
         try:
             response = await self._client.post("/api/chat", json=body)

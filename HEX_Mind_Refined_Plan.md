@@ -115,7 +115,17 @@ any state → failed | cancelled
 applied → reverted
 ```
 
-M2 note: while the worker nodes are stubs, runs end in `completed` with a `run_completed {stub: true}` event and no diff. From M3, runs end in `awaiting_approval`.
+M2 note: while the worker nodes are stubs, runs end in `completed` with a `run_completed {stub: true}` event and no diff. From M3, runs end in `awaiting_approval`. A run whose tasks finish without changing files ends in `completed`, and a run with no completed task and no changes ends in `failed`.
+
+**M3 implementation decisions** (recorded for the team):
+- **R1 resolved.** CrewAI 1.15's `BaseLLM` is subclassed (`HexLLM`), so every agent call goes through `ProviderRouter`. Agents use text ReAct, not native function calling, so any provider works, including Ollama 7B. CrewAI telemetry is turned off.
+- **Snapshots** use a temporary Git index (`read-tree` / `add -A` / `write-tree` / `commit-tree`), so untracked files are included and the user's index and branch are never touched. `git stash create` would have missed untracked files.
+- **Event loops.** Subprocess work (git, Docker) runs as blocking calls in a thread pool, and the MCP stdio client has its own thread with a Proactor loop. Reason: `uvicorn --reload` on Windows uses a selector loop, which can't spawn asyncio subprocesses.
+- **Coder–Reviewer rounds** run inside one claim (up to `review_max_rounds + 1`). The orchestrator runs the authoritative `test` check after every Coder round; checks the agents run themselves appear only as `tool_called`.
+- **Offline checks.** Detected profiles assume dependency-free tests (`node --test`). `npm ci` with network access becomes an approval-gated step in M6.
+- **Embeddings** come from Ollama's `nomic-embed-text`, so nothing is downloaded at runtime and no data leaves the machine.
+- **Lease heartbeat.** A single local-model call can take longer than a 10-minute lease. Workers renew their lease every quarter lease, and a worker whose lease was lost cancels its own work instead of racing the new owner. This was found in a live run where two Coders ended up on one task.
+- **Agent claims aren't evidence.** A Coder round that changes no files is rejected without running a check. A check that exits 0 but ran zero tests (`# tests 0`) doesn't count as passing. Both were found in a live run, where the 7B Coder answered "done, tests pass" without calling any tool.
 
 ### 3.3 Task lifecycle (Blackboard)
 
@@ -392,7 +402,7 @@ Each milestone ends with: code runs, tests/type checks/builds pass, a short repo
 
 ### M8 — Hardening and delivery (Week 8)
 - Playwright E2E for the demo path, stress tests (concurrency, provider faults, WS drops), security review of the sandbox, path guard and IPC.
-- Packaged build that spawns and monitors the backend, waits on health with a timeout, shows diagnostics, and shuts down cleanly. **Stretch:** an installer. The demo may run from the dev build with Compose.
+- **No deployment:** the project is not shipped or packaged (decided 2026-10-23). There is no installer and no packaged build. The app runs from the dev setup (`npm run dev` + `npm run dev:backend` + Docker Compose), and M8 focuses on reliability and the demo.
 - README, architecture doc, evaluation report, limitations, rehearsed demo.
 
 ---
