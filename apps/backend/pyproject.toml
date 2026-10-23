@@ -1,0 +1,27 @@
+[project]
+name = "hexmind-backend"
+version = "0.1.0"
+description = "Local FastAPI backend for the H.E.X Mind desktop IDE"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.161.1",
+    "pydantic-settings>=2.16.1",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.0",
+    "pytest>=9.1.1",
+    "ruff>=0.17.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
