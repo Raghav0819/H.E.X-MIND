@@ -33,12 +33,18 @@ def _uuid_pk() -> Mapped[uuid.UUID]:
     return mapped_column(primary_key=True, default=uuid.uuid4)
 
 
+# clock_timestamp(), not now(): now() is the transaction start time, so rows inserted in one
+# transaction would share a timestamp and lose their order.
 def _created_at() -> Mapped[datetime]:
-    return mapped_column(DateTime(timezone=True), server_default=func.now())
+    return mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp())
 
 
 def _updated_at() -> Mapped[datetime]:
-    return mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    return mapped_column(
+        DateTime(timezone=True),
+        server_default=func.clock_timestamp(),
+        onupdate=func.clock_timestamp(),
+    )
 
 
 def _fk(target: str, *, nullable: bool = False, ondelete: str = "CASCADE") -> Mapped[Any]:
@@ -66,6 +72,8 @@ class Conversation(Base):
     project_id: Mapped[uuid.UUID] = _fk("projects.id")
     title: Mapped[str] = mapped_column(String(255))
     summary: Mapped[str | None] = mapped_column(Text)
+    # Number of oldest messages already folded into `summary`.
+    summary_message_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = _updated_at()
 

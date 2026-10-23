@@ -6,37 +6,15 @@ same run are serialized and a rolled-back event does not consume a number.
 """
 
 import uuid
-from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AgentEvent, Run
+from app.events.schema import PAYLOADS, EventType
 
-
-class EventType(StrEnum):
-    RUN_CREATED = "run_created"
-    RUN_STATUS_CHANGED = "run_status_changed"
-    ROUTER_DECIDED = "router_decided"
-    TASK_CREATED = "task_created"
-    TASK_CLAIMED = "task_claimed"
-    TASK_STARTED = "task_started"
-    TOOL_CALLED = "tool_called"
-    LLM_CALL_STARTED = "llm_call_started"
-    LLM_CALL_COMPLETED = "llm_call_completed"
-    PROVIDER_FALLBACK = "provider_fallback"
-    CHECK_STARTED = "check_started"
-    CHECK_COMPLETED = "check_completed"
-    REVIEW_STARTED = "review_started"
-    REVIEW_COMPLETED = "review_completed"
-    TASK_COMPLETED = "task_completed"
-    TASK_FAILED = "task_failed"
-    TASK_BLOCKED = "task_blocked"
-    DIFF_READY = "diff_ready"
-    RUN_COMPLETED = "run_completed"
-    RUN_FAILED = "run_failed"
-    RUN_CANCELLED = "run_cancelled"
+__all__ = ["EventType", "append_event", "list_events"]
 
 
 async def append_event(
@@ -48,6 +26,8 @@ async def append_event(
     task_id: uuid.UUID | None = None,
     payload: dict[str, Any] | None = None,
 ) -> AgentEvent:
+    # Validate against the event contract before taking a sequence number.
+    validated = PAYLOADS[type].model_validate(payload or {}).model_dump(mode="json")
     seq = (
         await session.execute(
             update(Run)
@@ -62,7 +42,7 @@ async def append_event(
         type=type.value,
         agent_id=agent_id,
         task_id=task_id,
-        payload=payload or {},
+        payload=validated,
     )
     session.add(event)
     await session.flush()

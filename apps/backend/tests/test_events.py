@@ -30,7 +30,11 @@ async def test_create_run_persists_run_created_event(
     assert event["seq"] == 1
     assert event["type"] == "run_created"
     assert event["run_id"] == run["id"]
-    assert event["payload"] == {"title": "demo"}
+    assert event["payload"] == {
+        "title": "demo",
+        "parent_run_id": None,
+        "triggering_message_id": None,
+    }
     uuid.UUID(event["event_id"])
 
 
@@ -42,7 +46,7 @@ async def test_concurrent_appends_get_unique_gap_free_seqs(
 
     async def append(i: int) -> None:
         async with sessionmaker.begin() as session:
-            await append_event(session, run_id, EventType.TOOL_CALLED, payload={"i": i})
+            await append_event(session, run_id, EventType.TOOL_CALLED, payload={"tool": f"t{i}"})
 
     await asyncio.gather(*(append(i) for i in range(25)))
 
@@ -59,11 +63,11 @@ async def test_rolled_back_event_does_not_consume_seq(
 
     with pytest.raises(RuntimeError):
         async with sessionmaker.begin() as session:
-            await append_event(session, run_id, EventType.TOOL_CALLED)
+            await append_event(session, run_id, EventType.TOOL_CALLED, payload={"tool": "t"})
             raise RuntimeError("abort transaction")
 
     async with sessionmaker.begin() as session:
-        event = await append_event(session, run_id, EventType.TOOL_CALLED)
+        event = await append_event(session, run_id, EventType.TOOL_CALLED, payload={"tool": "t"})
     assert event.seq == 2
 
 
@@ -71,7 +75,9 @@ async def test_events_after_seq(client: httpx.AsyncClient, app: FastAPI, workspa
     run = await _create_run(client, workspace)
     async with app.state.sessionmaker.begin() as session:
         for _ in range(3):
-            await append_event(session, uuid.UUID(run["id"]), EventType.TOOL_CALLED)
+            await append_event(
+                session, uuid.UUID(run["id"]), EventType.TOOL_CALLED, payload={"tool": "t"}
+            )
 
     events = (await client.get(f"/api/runs/{run['id']}/events", params={"after_seq": 2})).json()
     assert [e["seq"] for e in events] == [3, 4]

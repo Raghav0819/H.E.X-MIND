@@ -12,6 +12,7 @@
     "dev:backend": "uv --directory apps/backend run python -m app",
     "db:up": "docker compose up -d --wait",
     "db:migrate": "uv --directory apps/backend run alembic upgrade head",
+    "gen:events": "uv --directory apps/backend run python -m app.events.export_schema ../desktop/src/renderer/src/generated/events.schema.json && json2ts --input apps/desktop/src/renderer/src/generated/events.schema.json --output apps/desktop/src/renderer/src/generated/events.ts --bannerComment \"/* Generated from the backend event schema (apps/backend/app/events/schema.py). Do not edit; run: npm run gen:events */\"",
     "build": "npm run build -w @hexmind/desktop",
     "typecheck": "npm run typecheck -w @hexmind/desktop",
     "test": "npm run test -w @hexmind/desktop && npm run test:backend",

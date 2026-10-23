@@ -15,10 +15,12 @@ class OllamaAdapter:
         base_url: str,
         model: str,
         *,
-        timeout_s: float = 120.0,
+        num_ctx: int = 8192,
+        timeout_s: float = 180.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.model = model
+        self._num_ctx = num_ctx
         self._client = httpx.AsyncClient(base_url=base_url, timeout=timeout_s, transport=transport)
 
     async def aclose(self) -> None:
@@ -47,7 +49,11 @@ class OllamaAdapter:
             "model": self.model,
             "messages": [m.model_dump() for m in request.messages],
             "stream": False,
-            "options": {"temperature": request.temperature, "num_predict": request.max_tokens},
+            "options": {
+                "temperature": request.temperature,
+                "num_predict": request.max_tokens,
+                "num_ctx": self._num_ctx,
+            },
         }
         if request.json_schema is not None:
             body["format"] = request.json_schema

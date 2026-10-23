@@ -115,6 +115,8 @@ any state → failed | cancelled
 applied → reverted
 ```
 
+M2 note: while the worker nodes are stubs, runs end in `completed` with a `run_completed {stub: true}` event and no diff. From M3, runs end in `awaiting_approval`.
+
 ### 3.3 Task lifecycle (Blackboard)
 
 `pending → claimed → running → review → completed`, with `failed`, `changes_requested → pending (retry)`, `blocked` (dependency failed or retries exhausted).

@@ -101,3 +101,87 @@ export function createApiClient(config: BackendConfig, fetchFn: typeof fetch = f
     put: (path, body) => request('PUT', path, body)
   }
 }
+
+// ---------- Conversations and runs ----------
+
+export type ChatMode = 'ask' | 'edit' | 'auto'
+
+export interface Conversation {
+  id: string
+  project_id: string
+  title: string
+  summary: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface RouteInfo {
+  route: 'answer' | 'clarify' | 'run'
+  request_type: string
+  complexity: 'low' | 'medium' | 'high'
+  confidence: number | null
+  strategy: string | null
+  fallback_used: boolean
+  policy_note: string | null
+  reason: string
+  decision_id: string
+}
+
+export interface ContextSources {
+  files: { path: string; reason: 'mentioned' | 'prior_run' | 'search'; truncated: boolean }[]
+  omitted_files: string[]
+  messages: number
+  summary: boolean
+  prior_runs: number
+}
+
+export interface LlmInfo {
+  provider: string
+  model: string
+  latency_ms: number
+  input_tokens: number | null
+  output_tokens: number | null
+}
+
+export interface AssistantMetadata {
+  kind: 'answer' | 'clarification' | 'run_started' | 'error'
+  route: RouteInfo
+  context: ContextSources
+  llm: LlmInfo | null
+  run_id: string | null
+}
+
+export interface ChatMessage {
+  id: string
+  conversation_id: string
+  role: 'user' | 'assistant' | 'system'
+  mode: ChatMode | null
+  content: string
+  metadata: Partial<AssistantMetadata>
+  created_at: string
+}
+
+export interface MessageExchange {
+  user_message: ChatMessage
+  assistant_message: ChatMessage
+  run_id: string | null
+}
+
+export interface Run {
+  id: string
+  project_id: string
+  conversation_id: string | null
+  parent_run_id: string | null
+  triggering_message_id: string | null
+  title: string
+  status: string
+  complexity: string | null
+  strategy: string | null
+  last_event_seq: number
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+}
+
+/** Run statuses after which no further events are expected. */
+export const TERMINAL_RUN_STATUSES = new Set(['completed', 'failed', 'cancelled', 'applied', 'rejected', 'reverted'])
