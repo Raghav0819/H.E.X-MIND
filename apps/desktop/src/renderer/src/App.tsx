@@ -13,10 +13,13 @@ import { useState } from 'react'
 
 import { BackendStatusPill } from './components/BackendStatusPill'
 import { EmptyState, PanelHeader } from './components/Panel'
+import { ChatPanel } from './features/chat/ChatPanel'
+import { useChat } from './features/chat/useChat'
 import { EditorArea } from './features/editor/EditorArea'
 import { disposeModel } from './features/editor/monaco'
 import { useEditorTabs } from './features/editor/useEditorTabs'
 import { FileTree } from './features/explorer/FileTree'
+import { RunEventsPanel } from './features/runs/RunEventsPanel'
 import { Welcome } from './features/workspace/Welcome'
 import { useWorkspace } from './features/workspace/useWorkspace'
 import { useBackendHealth } from './hooks/useBackendHealth'
@@ -46,12 +49,27 @@ export function App() {
   const workspace = useWorkspace(api, status.kind === 'connected')
   const project = workspace.project
   const editor = useEditorTabs(api, project?.id ?? null, disposeModel)
+  const chat = useChat(api, project?.id ?? null)
 
   const [view, setView] = useState<View>('explorer')
   const [rightOpen, setRightOpen] = useState(true)
   const [bottomOpen, setBottomOpen] = useState(true)
   const [bottomTab, setBottomTab] = useState<BottomTab>('Problems')
   const [treeRefresh, setTreeRefresh] = useState(0)
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+
+  const openRun = (runId: string) => {
+    setSelectedRunId(runId)
+    setBottomTab('Agent Events')
+    setBottomOpen(true)
+  }
+
+  const chatDisabledReason =
+    status.kind !== 'connected'
+      ? 'The backend is not connected.'
+      : !project
+        ? 'Open a workspace to start a conversation with the agents.'
+        : ''
 
   const viewLabel = VIEWS.find((v) => v.id === view)?.label ?? ''
 
@@ -175,10 +193,13 @@ export function App() {
 
       {rightOpen && (
         <aside className="rightpanel" aria-label="Agent chat">
-          <PanelHeader title="Agent Chat" />
-          <EmptyState title="Chat is not available yet">
-            Agent chat arrives in a later milestone.
-          </EmptyState>
+          <ChatPanel
+            chat={chat}
+            enabled={chatDisabledReason === ''}
+            disabledReason={chatDisabledReason}
+            onOpenRun={openRun}
+            onOpenFile={(path) => void editor.openFile(path)}
+          />
         </aside>
       )}
 
@@ -199,7 +220,11 @@ export function App() {
             ))}
           </div>
           <div className="bottompanel__body" role="tabpanel" aria-label={bottomTab}>
-            <EmptyState title={`No ${bottomTab.toLowerCase()} to show`} />
+            {bottomTab === 'Agent Events' ? (
+              <RunEventsPanel api={api} runId={selectedRunId} />
+            ) : (
+              <EmptyState title={`No ${bottomTab.toLowerCase()} to show`} />
+            )}
           </div>
         </section>
       )}

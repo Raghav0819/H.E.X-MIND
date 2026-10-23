@@ -60,8 +60,11 @@ class RunOut(ORMModel):
     project_id: uuid.UUID
     conversation_id: uuid.UUID | None
     parent_run_id: uuid.UUID | None
+    triggering_message_id: uuid.UUID | None
     title: str
     status: str
+    complexity: str | None
+    strategy: str | None
     last_event_seq: int
     created_at: datetime
     started_at: datetime | None
@@ -78,3 +81,37 @@ class EventOut(ORMModel):
     agent_id: str | None
     task_id: uuid.UUID | None
     payload: dict[str, Any]
+
+
+class ConversationCreate(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+
+
+class ConversationOut(ORMModel):
+    id: uuid.UUID
+    project_id: uuid.UUID
+    title: str
+    summary: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MessageCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=20_000)
+    mode: Literal["ask", "edit", "auto"] = "auto"
+
+
+class MessageOut(ORMModel):
+    id: uuid.UUID
+    conversation_id: uuid.UUID
+    role: str
+    mode: str | None
+    content: str
+    metadata: dict[str, Any] = Field(validation_alias="meta")
+    created_at: datetime
+
+
+class MessageExchangeOut(BaseModel):
+    user_message: MessageOut
+    assistant_message: MessageOut
+    run_id: uuid.UUID | None

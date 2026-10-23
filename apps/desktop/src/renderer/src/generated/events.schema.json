@@ -1,0 +1,2003 @@
+{
+  "$defs": {
+    "CheckCompleted": {
+      "additionalProperties": false,
+      "properties": {
+        "duration_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "exit_code",
+        "duration_ms"
+      ],
+      "title": "CheckCompleted",
+      "type": "object"
+    },
+    "CheckCompletedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/CheckCompleted"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "check_completed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "CheckCompletedEvent",
+      "type": "object"
+    },
+    "CheckStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "CheckStarted",
+      "type": "object"
+    },
+    "CheckStartedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/CheckStarted"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "check_started",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "CheckStartedEvent",
+      "type": "object"
+    },
+    "DiffReady": {
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "files"
+      ],
+      "title": "DiffReady",
+      "type": "object"
+    },
+    "DiffReadyEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/DiffReady"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "diff_ready",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "DiffReadyEvent",
+      "type": "object"
+    },
+    "LLMCallCompleted": {
+      "additionalProperties": false,
+      "properties": {
+        "attempts": {
+          "type": "integer"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "latency_ms": {
+          "type": "integer"
+        },
+        "model": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provider": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model",
+        "purpose",
+        "ok",
+        "latency_ms",
+        "input_tokens",
+        "output_tokens",
+        "attempts",
+        "error"
+      ],
+      "title": "LLMCallCompleted",
+      "type": "object"
+    },
+    "LLMCallStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model",
+        "purpose"
+      ],
+      "title": "LLMCallStarted",
+      "type": "object"
+    },
+    "LlmCallCompletedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/LLMCallCompleted"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "llm_call_completed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "LlmCallCompletedEvent",
+      "type": "object"
+    },
+    "LlmCallStartedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/LLMCallStarted"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "llm_call_started",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "LlmCallStartedEvent",
+      "type": "object"
+    },
+    "ProviderFallback": {
+      "additionalProperties": false,
+      "properties": {
+        "from_provider": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "to_provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_provider",
+        "to_provider",
+        "reason"
+      ],
+      "title": "ProviderFallback",
+      "type": "object"
+    },
+    "ProviderFallbackEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/ProviderFallback"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "provider_fallback",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "ProviderFallbackEvent",
+      "type": "object"
+    },
+    "ReviewCompleted": {
+      "additionalProperties": false,
+      "properties": {
+        "findings": {
+          "default": 0,
+          "type": "integer"
+        },
+        "verdict": {
+          "enum": [
+            "approved",
+            "changes_requested",
+            "blocked"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "verdict",
+        "findings"
+      ],
+      "title": "ReviewCompleted",
+      "type": "object"
+    },
+    "ReviewCompletedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/ReviewCompleted"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "review_completed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "ReviewCompletedEvent",
+      "type": "object"
+    },
+    "ReviewStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "reviewer": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reviewer"
+      ],
+      "title": "ReviewStarted",
+      "type": "object"
+    },
+    "ReviewStartedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/ReviewStarted"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "review_started",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "ReviewStartedEvent",
+      "type": "object"
+    },
+    "RouterDecided": {
+      "additionalProperties": false,
+      "properties": {
+        "complexity": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "type": "string"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fallback_used": {
+          "type": "boolean"
+        },
+        "request_type": {
+          "type": "string"
+        },
+        "route": {
+          "enum": [
+            "answer",
+            "clarify",
+            "run"
+          ],
+          "type": "string"
+        },
+        "strategy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "request_type",
+        "complexity",
+        "confidence",
+        "route",
+        "strategy",
+        "fallback_used"
+      ],
+      "title": "RouterDecided",
+      "type": "object"
+    },
+    "RouterDecidedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/RouterDecided"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "router_decided",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "RouterDecidedEvent",
+      "type": "object"
+    },
+    "RunCancelled": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "RunCancelled",
+      "type": "object"
+    },
+    "RunCancelledEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/RunCancelled"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "run_cancelled",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "RunCancelledEvent",
+      "type": "object"
+    },
+    "RunCompleted": {
+      "additionalProperties": false,
+      "properties": {
+        "stub": {
+          "default": false,
+          "type": "boolean"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "summary",
+        "stub"
+      ],
+      "title": "RunCompleted",
+      "type": "object"
+    },
+    "RunCompletedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/RunCompleted"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "run_completed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "RunCompletedEvent",
+      "type": "object"
+    },
+    "RunCreated": {
+      "additionalProperties": false,
+      "properties": {
+        "parent_run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "title": {
+          "type": "string"
+        },
+        "triggering_message_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "title",
+        "parent_run_id",
+        "triggering_message_id"
+      ],
+      "title": "RunCreated",
+      "type": "object"
+    },
+    "RunCreatedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/RunCreated"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "run_created",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "RunCreatedEvent",
+      "type": "object"
+    },
+    "RunFailed": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "title": "RunFailed",
+      "type": "object"
+    },
+    "RunFailedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/RunFailed"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "run_failed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "RunFailedEvent",
+      "type": "object"
+    },
+    "RunStatusChanged": {
+      "additionalProperties": false,
+      "properties": {
+        "previous": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status": {
+          "type": "string"
+        },
+        "stub": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "status",
+        "previous",
+        "stub"
+      ],
+      "title": "RunStatusChanged",
+      "type": "object"
+    },
+    "RunStatusChangedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/RunStatusChanged"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "run_status_changed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "RunStatusChangedEvent",
+      "type": "object"
+    },
+    "TaskBlocked": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "TaskBlocked",
+      "type": "object"
+    },
+    "TaskBlockedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TaskBlocked"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "task_blocked",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "TaskBlockedEvent",
+      "type": "object"
+    },
+    "TaskClaimed": {
+      "additionalProperties": false,
+      "properties": {
+        "worker": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "worker"
+      ],
+      "title": "TaskClaimed",
+      "type": "object"
+    },
+    "TaskClaimedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TaskClaimed"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "task_claimed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "TaskClaimedEvent",
+      "type": "object"
+    },
+    "TaskCompleted": {
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "summary"
+      ],
+      "title": "TaskCompleted",
+      "type": "object"
+    },
+    "TaskCompletedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TaskCompleted"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "task_completed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "TaskCompletedEvent",
+      "type": "object"
+    },
+    "TaskCreated": {
+      "additionalProperties": false,
+      "properties": {
+        "complexity": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "depends_on": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "target_files": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "complexity",
+        "depends_on",
+        "target_files"
+      ],
+      "title": "TaskCreated",
+      "type": "object"
+    },
+    "TaskCreatedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TaskCreated"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "task_created",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "TaskCreatedEvent",
+      "type": "object"
+    },
+    "TaskFailed": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "title": "TaskFailed",
+      "type": "object"
+    },
+    "TaskFailedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TaskFailed"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "task_failed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "TaskFailedEvent",
+      "type": "object"
+    },
+    "TaskStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "worker": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "worker"
+      ],
+      "title": "TaskStarted",
+      "type": "object"
+    },
+    "TaskStartedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/TaskStarted"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "task_started",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "TaskStartedEvent",
+      "type": "object"
+    },
+    "ToolCalled": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "default": true,
+          "type": "boolean"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tool": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool",
+        "ok",
+        "summary"
+      ],
+      "title": "ToolCalled",
+      "type": "object"
+    },
+    "ToolCalledEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/ToolCalled"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "tool_called",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "ToolCalledEvent",
+      "type": "object"
+    }
+  },
+  "description": "H.E.X Mind agent event, schema version 1.",
+  "discriminator": {
+    "mapping": {
+      "check_completed": "#/$defs/CheckCompletedEvent",
+      "check_started": "#/$defs/CheckStartedEvent",
+      "diff_ready": "#/$defs/DiffReadyEvent",
+      "llm_call_completed": "#/$defs/LlmCallCompletedEvent",
+      "llm_call_started": "#/$defs/LlmCallStartedEvent",
+      "provider_fallback": "#/$defs/ProviderFallbackEvent",
+      "review_completed": "#/$defs/ReviewCompletedEvent",
+      "review_started": "#/$defs/ReviewStartedEvent",
+      "router_decided": "#/$defs/RouterDecidedEvent",
+      "run_cancelled": "#/$defs/RunCancelledEvent",
+      "run_completed": "#/$defs/RunCompletedEvent",
+      "run_created": "#/$defs/RunCreatedEvent",
+      "run_failed": "#/$defs/RunFailedEvent",
+      "run_status_changed": "#/$defs/RunStatusChangedEvent",
+      "task_blocked": "#/$defs/TaskBlockedEvent",
+      "task_claimed": "#/$defs/TaskClaimedEvent",
+      "task_completed": "#/$defs/TaskCompletedEvent",
+      "task_created": "#/$defs/TaskCreatedEvent",
+      "task_failed": "#/$defs/TaskFailedEvent",
+      "task_started": "#/$defs/TaskStartedEvent",
+      "tool_called": "#/$defs/ToolCalledEvent"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/RunCreatedEvent"
+    },
+    {
+      "$ref": "#/$defs/RunStatusChangedEvent"
+    },
+    {
+      "$ref": "#/$defs/RouterDecidedEvent"
+    },
+    {
+      "$ref": "#/$defs/TaskCreatedEvent"
+    },
+    {
+      "$ref": "#/$defs/TaskClaimedEvent"
+    },
+    {
+      "$ref": "#/$defs/TaskStartedEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolCalledEvent"
+    },
+    {
+      "$ref": "#/$defs/LlmCallStartedEvent"
+    },
+    {
+      "$ref": "#/$defs/LlmCallCompletedEvent"
+    },
+    {
+      "$ref": "#/$defs/ProviderFallbackEvent"
+    },
+    {
+      "$ref": "#/$defs/CheckStartedEvent"
+    },
+    {
+      "$ref": "#/$defs/CheckCompletedEvent"
+    },
+    {
+      "$ref": "#/$defs/ReviewStartedEvent"
+    },
+    {
+      "$ref": "#/$defs/ReviewCompletedEvent"
+    },
+    {
+      "$ref": "#/$defs/TaskCompletedEvent"
+    },
+    {
+      "$ref": "#/$defs/TaskFailedEvent"
+    },
+    {
+      "$ref": "#/$defs/TaskBlockedEvent"
+    },
+    {
+      "$ref": "#/$defs/DiffReadyEvent"
+    },
+    {
+      "$ref": "#/$defs/RunCompletedEvent"
+    },
+    {
+      "$ref": "#/$defs/RunFailedEvent"
+    },
+    {
+      "$ref": "#/$defs/RunCancelledEvent"
+    }
+  ],
+  "title": "AgentEvent"
+}

@@ -5,7 +5,9 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel
 
-Purpose = Literal["router", "planner", "coder", "reviewer", "judge", "diagnostic"]
+Purpose = Literal[
+    "router", "chat", "summary", "planner", "coder", "reviewer", "judge", "diagnostic"
+]
 
 
 class ChatMessage(BaseModel):

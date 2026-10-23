@@ -63,7 +63,7 @@ async def open_project(body: ProjectCreate, session: SessionDep) -> Project:
         project = Project(name=workspace.name, workspace_path=str(workspace))
         session.add(project)
     project.git_enabled = git_enabled
-    project.updated_at = func.now()
+    project.updated_at = func.clock_timestamp()
     await session.flush()
     await session.refresh(project)
     return project

@@ -21,6 +21,13 @@ class Settings(BaseSettings):
 
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen2.5-coder:7b"
+    # Ollama's default context window is small; prompts carry project context.
+    ollama_num_ctx: int = 8192
+
+    # Approximate token budget for the context bundle sent with chat/router prompts.
+    context_budget_tokens: int = 5000
+    # Below this Router confidence, Auto mode asks for clarification instead of editing.
+    router_min_confidence: float = 0.6
 
     # Files larger than this are not opened in the editor.
     max_editor_file_bytes: int = 2 * 1024 * 1024

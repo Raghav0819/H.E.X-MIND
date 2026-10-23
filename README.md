@@ -3,12 +3,13 @@
 **Hivemind Execution X** is an agent-native desktop IDE with live multi-agent observability.
 The plan lives in [HEX_Mind_Refined_Plan.md](HEX_Mind_Refined_Plan.md).
 
-**Current milestone: M1 (foundation).**
+**Current milestone: M2 (chat, Router, context).**
 
 | Milestone | Delivered |
 |---|---|
 | M0 | Electron shell, secure preload bridge, React IDE frame, token-protected FastAPI health check |
 | M1 | PostgreSQL schema + Alembic migrations, workspace path guard, file explorer, Monaco editor with tabs and stale-file protection, per-run event log, Ollama provider with logged calls |
+| M2 | Persistent project conversations with Ask / Edit / Auto modes; ContextManager (budgeted, redacted, reads files fresh from disk, rolling summary); LLM Router with schema-validated output, one repair retry, deterministic policy and fallback, all decisions logged; LangGraph conversation and run graphs (worker nodes are labeled **stubs** until M3); typed event schema v1 with generated TypeScript types; run event viewer; routing-label tooling |
 
 ## Layout
 
@@ -61,6 +62,13 @@ The welcome screen shows readiness for the backend, the database and Ollama. Use
 
 If a file changes on disk after you opened it, saving is refused. The editor then offers **Reload from disk** or an explicit **Overwrite**.
 
+The **Agent Chat** panel works against the open workspace:
+- **Ask** answers using the current files and never edits anything.
+- **Edit** starts a run.
+- **Auto** lets the Router decide, and it asks for clarification when it's unsure.
+
+Each reply shows the route, the confidence, any fallback, and the files used as context. Run events appear in the **Agent Events** tab. In M2 the worker steps are stubs, so runs change no files, and their events are marked `stub`.
+
 To check the model provider end to end (the call is logged in `llm_calls`):
 
 ```sh
@@ -77,6 +85,10 @@ npm run typecheck      # tsc for main/preload and renderer
 npm run build          # electron-vite production build
 npm run lint:backend   # ruff
 ```
+
+The event contract lives in `apps/backend/app/events/schema.py`. After changing it, run `npm run gen:events` to regenerate `apps/desktop/src/renderer/src/generated/`. A backend test fails if the committed schema is out of date.
+
+Routing labels for the M7 evaluation are described in [docs/routing-labels.md](docs/routing-labels.md).
 
 Backend tests use the `hexmind_test` database and rebuild it from the migrations on every run. The two symlink-escape tests are skipped on Windows unless Developer Mode is enabled, because creating symlinks requires it.
 
