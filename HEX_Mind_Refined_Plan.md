@@ -200,6 +200,37 @@ changed file/hunk → tool call (write_file) → agent step → model call → p
 - **Provenance view** on the diff.
 - **Stream:** WebSocket push of events (replacing the 1 s polling), with snapshot and reconnect (seq-based, already designed).
 
+### 7.6 Observability UI: every criterion visible in the app
+
+Everything the system does is visible in the desktop app, driven only by real backend data (the event log, the monitoring hub's spans and metrics, and the database), streamed over WebSocket. A new **Observability** activity in the left bar opens full-width dashboards, and every view can be filtered to the current run. Each view ships in the same phase as its backend feature.
+
+| Criterion | View | What it shows | Phase |
+|---|---|---|---|
+| 1 State sharing | **Blackboard board** | Live columns (pending → claimed → running → review → completed / blocked / failed). Each task card shows the worker holding it, a lease countdown, attempts, target files and dependency arrows. Plus a **claim log** (who claimed what and when, including lost races and reaped leases). | P1 (Blackboard), P3 |
+| 1 State sharing | **Message flow** (messaging mode) | A sequence diagram of A2A messages between the orchestrator and agents: sent, acknowledged, retried, timed out. | P3 |
+| 1 State sharing | **Blackboard vs messaging** | The same task under both backends, side by side: time, tokens, messages or queries, duplicated work, recovery. | P6 |
+| 2 MCP tools | **Tool catalog + live calls** | The 16 tools with their schemas and which roles may use them. A live feed of each call's arguments, result, latency and errors. Per-tool statistics. | P3 |
+| 3 Structured output | **Schema checks** | For every model output, the schema used, whether it validated first time, was repaired or fell back, and the validation errors. | P1 |
+| 4 Design patterns | **Pattern topology** | A diagram of the active pattern (single, sequential, reflection, parallel, adaptive) with the running agent highlighted live. A comparison chart per pattern. | P1, P6 |
+| 5 Callbacks | **Callback stream + agent grid** | A live, filterable stream of every callback (8 ADK types plus CrewAI's), and a grid of all agents with their status, current step, tokens and cost. | P1 |
+| 6 A2A | **A2A explorer** | Agent cards (skills, endpoint, framework) and a timeline of each A2A task (submitted → working → completed) with its messages, linked to the trace across the boundary. | P2 |
+| 7 Frameworks | **Framework badges** | Every agent, span and event is tagged ADK or CrewAI by colour, and the architecture diagram shows which framework runs which part. | P1 |
+| 8 Guardrails | **Guardrail activity** | Every guardrail check and trigger: what was blocked or repaired and why, with links to the call. A budget meter per run. | P4 |
+| 8 Prompt variants | **Prompt variant manager** | View and diff variants, choose the active ones or an A/B split, and see per-variant results. | P4, P6 |
+| 9 Tracing | **Trace explorer** | A waterfall of the span tree (run → agent → model / tool / A2A / sandbox) with redacted prompts and responses, timings, tokens and cost. | P5 |
+| 9 Audit | **Audit log** | The append-only record list with a **Verify chain** button that shows verified, or the first broken record. | P5 |
+| 9 Provenance | **Provenance explorer** | Click any changed line in a diff to walk tool call → agent step → model call → prompt variant → task → plan → user message. Exportable as PROV JSON. | P5 |
+| 9 Metrics | **Metrics dashboard** | Cost, latency (p50/p95), tokens, error, fallback and retry rates, by provider, agent, pattern and prompt variant, over time. | P5 |
+| 10 Evaluation | **Experiment dashboard** | The run matrix (tasks × configurations) with pass/fail from the hidden tests, cost and time charts, prompt-variance box plots and significance results. | P6 |
+| 11 Cloud | **Deployment status** | Service health and versions, Cloud Trace links. | P8 |
+| (all) | **Live architecture map** | The system diagram (§1) with live activity on each node and edge: agents, A2A links, MCP and Blackboard. It replaces the earlier game-style map idea and can be animated as polish. | P5 |
+
+**Rules for these views:**
+- Everything shown is backed by stored data; there are no simulated animations.
+- Every view works after a reconnect (snapshot plus event resume).
+- Prompts and responses are shown **redacted**.
+- **Charting library:** charts need one (for example Recharts). It's a new dependency, so it needs approval before P5.
+
 ---
 
 ## 8. Guardrails and prompt variants (criterion 8)
@@ -271,12 +302,12 @@ M4 must be committed before P1 starts.
 
 | Phase | Goal | Criteria | Exit check |
 |---|---|---|---|
-| **P1 — ADK core** | Replace LangGraph with ADK agents; `HexAdkLlm`; TelemetryHub; all ADK and CrewAI callbacks wired | 7, 5, 3 | No LangGraph anywhere; every existing behaviour test passes; each callback type produces events and spans; one live run end to end |
-| **P2 — A2A** | Serve the CrewAI Planner and Coder crews as A2A agents; ADK orchestrator uses them as remote agents; trace context propagated | 6, 9 | A run whose CrewAI work happens over A2A, traced as one tree across processes |
-| **P3 — 16 MCP tools + messaging backend** | Add 10 tools; `CoordinationBackend` with Blackboard and messaging | 2, 1 | 16 tools with tests; the same benchmark task passes on both backends |
-| **P4 — Guardrails + prompt variants** | Layered guardrails (§8.1), variant registry and UI | 8, 5 | Each guardrail has a triggering test; variant ids appear on every call |
-| **P5 — Observability** | OTel collector + Jaeger, `trace_spans`, hash-chained audit log, provenance graph, WebSocket stream, trace, metrics, audit and provenance views | 9, 5 | Select a diff hunk to see its full provenance chain; the audit chain verifies; the trace waterfall renders a live run |
-| **P6 — Evaluation** | Runner + experiments E1–E4 + report | 10, 1, 4, 8 | Reproducible report with cost, time and prompt-variance results and the pattern and state-sharing comparisons |
+| **P1 — ADK core** | Replace LangGraph with ADK agents; `HexAdkLlm`; TelemetryHub; all ADK and CrewAI callbacks wired; **UI: Observability activity, Blackboard board + claim log, callback stream, agent grid, framework badges, schema checks, pattern topology** | 7, 5, 3, 1 | No LangGraph anywhere; every existing behaviour test passes; each callback type produces events and spans; one live run end to end, **watched live in the Blackboard and callback views** |
+| **P2 — A2A** | Serve the CrewAI Planner and Coder crews as A2A agents; ADK orchestrator uses them as remote agents; trace context propagated; **UI: A2A explorer** | 6, 9 | A run whose CrewAI work happens over A2A, traced as one tree across processes **and visible in the A2A explorer** |
+| **P3 — 16 MCP tools + messaging backend** | Add 10 tools; `CoordinationBackend` with Blackboard and messaging; **UI: tool catalog + live calls, message-flow diagram** | 2, 1 | 16 tools with tests; the same benchmark task passes on both backends; **both modes viewable live** |
+| **P4 — Guardrails + prompt variants** | Layered guardrails (§8.1), variant registry; **UI: guardrail activity, budget meter, prompt variant manager** | 8, 5 | Each guardrail has a triggering test; variant ids appear on every call and in the UI |
+| **P5 — Observability** | OTel collector + Jaeger, `trace_spans`, hash-chained audit log, provenance graph, WebSocket stream; **UI: trace explorer, metrics dashboard, audit log with verify, provenance explorer, live architecture map** | 9, 5 | Select a diff hunk to see its full provenance chain; the audit chain verifies; the trace waterfall renders a live run |
+| **P6 — Evaluation** | Runner + experiments E1–E4 + report; **UI: experiment dashboard, pattern and state-sharing comparisons, prompt-variance charts** | 10, 1, 4, 8 | Reproducible report with cost, time and prompt-variance results, **browsable in the app** |
 | **P7 — Product loop** | Apply, reject and revert diffs; follow-up runs; attention queue; reliability tests | — | The demo script runs end to end on the to-do app |
 | **P8 — Cloud deployment (later)** | §11 | 11 | The deployed system runs the demo |
 
@@ -315,11 +346,34 @@ This is planned now and built last. Target: **Google Cloud**, which fits ADK.
 
 ---
 
+## 12a. Version-check spike results (2026-11-01)
+
+Run in a throwaway environment against the exact versions we'll use.
+
+| Check | Result |
+|---|---|
+| Versions | **google-adk 2.13.0**, **crewai 1.15.28** (unchanged), **a2a-sdk 0.3.26** (pinned, see below), mcp 1.28.1, opentelemetry-sdk 1.44. No LangGraph or LiteLLM pulled in. |
+| ADK custom model (`BaseLlm.generate_content_async`) | ✅ A scripted `BaseLlm` drove `LlmAgent`s, including tool calls and tool results. `HexAdkLlm → ProviderRouter` is feasible. |
+| Workflow agents | ✅ `SequentialAgent` and `LoopAgent` (plus `ParallelAgent`, custom `BaseAgent`, `Runner`) work. ⚠️ **A `LoopAgent` doesn't stop on approval by itself**: the Reviewer must escalate (`actions.escalate`) to end the loop. ⚠️ Every iteration sees the full prior history, so per-round context must be controlled. |
+| Pydantic `output_schema` | ✅ The Reviewer's `output_schema=Verdict` lands in session state as a validated dict. |
+| Callbacks | ✅ before/after agent, model and tool callbacks all fire. ADK 2.13 also has `on_model_error_callback` and `on_tool_error_callback` (**8 callback types**), and all will be wired. |
+| MCP | ✅ `McpToolset` + `StdioConnectionParams` discovered and called tools on a stdio MCP server, and tool callbacks fired. ⚠️ Subprocesses need a Proactor loop on Windows: run the backend without `--reload`, or host `McpToolset` on the dedicated MCP thread (as `McpWorkspace` already does). |
+| Tracing | ✅ ADK emits OpenTelemetry GenAI spans in **one trace**: `invoke_workflow → invoke_agent → generate_content / execute_tool`, with `gen_ai.*` attributes. Our hub adds CrewAI and sandbox spans plus cost and prompt-variant attributes. |
+| A2A: ADK → CrewAI | ✅ A CrewAI crew served over HTTP with an a2a-sdk `AgentExecutor` + `A2AStarletteApplication` was called by an ADK `RemoteA2aAgent` inside a `SequentialAgent`, and the reply came back as an ADK event. |
+| Trace propagation across A2A | ✅ `RemoteA2aAgent(a2a_request_meta_provider=…)` delivered `traceparent` and our run ID to the CrewAI side in **request-level** metadata (`RequestContext.metadata`), not in the message metadata. |
+| **a2a-sdk version conflict** | ⚠️ ADK accepts `a2a-sdk >=0.3.4,<2`. CrewAI's `a2a` extra requires `~=0.3.10`, and its A2A code **breaks on a2a-sdk 1.x** (`A2AClientHTTPError` was removed). **Decision: pin `a2a-sdk[http-server]~=0.3.10`** (0.3.26 tested) and install `crewai[a2a]` + `google-adk[a2a]`. |
+| CrewAI native A2A | It provides a **client** (a CrewAI agent delegates to remote A2A agents via `A2AClientConfig`) and agent-card generation, but **no server runner**. So we serve crews with our own `AgentExecutor`, and the reverse direction (CrewAI → ADK Reviewer served via `to_a2a`) uses CrewAI's native client. |
+| ADK persistent sessions | `DatabaseSessionService` needs the `google-adk[db]` extra (SQLAlchemy, already in the project). To be checked against Postgres in P1. |
+
+---
+
 ## 13. Risks
 
 | Risk | Mitigation |
 |---|---|
-| ADK `BaseLlm` subclassing or A2A APIs differ from the docs in the pinned version | **Spike first in P1/P2** (as with the CrewAI R1 spike), and record the findings. |
+| ADK/A2A API drift | **Spike done** (§12a). Pin `google-adk==2.13.*`, `a2a-sdk~=0.3.10`, `crewai==1.15.28`. Upgrading any of them requires re-running the spike scripts. |
+| a2a-sdk 1.x is incompatible with CrewAI's A2A code | Pinned to 0.3. Revisit when CrewAI supports a2a-sdk 1.x. |
+| MCP/A2A subprocesses on Windows under `uvicorn --reload` | Run without reload for agent work, or keep MCP on its own Proactor thread. |
 | A2A adds latency and failure modes | Timeouts, idempotent resends, and A2A traced as spans. Messaging-backend recovery is part of the comparison. |
 | Free-tier quotas make the experiments slow | Paced runner, resumable experiments, cached seeds; a paid tier if needed for E2–E4. |
 | Too much observability UI | Build in the order trace explorer → metrics → audit → provenance; the Phaser map is optional. |
