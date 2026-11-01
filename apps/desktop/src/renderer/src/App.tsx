@@ -19,6 +19,7 @@ import { EditorArea } from './features/editor/EditorArea'
 import { disposeModel } from './features/editor/monaco'
 import { useEditorTabs } from './features/editor/useEditorTabs'
 import { FileTree } from './features/explorer/FileTree'
+import { ProvidersPanel } from './features/settings/ProvidersPanel'
 import { DiffView } from './features/runs/DiffView'
 import { RunEventsPanel } from './features/runs/RunEventsPanel'
 import { TasksPanel } from './features/runs/TasksPanel'
@@ -42,7 +43,7 @@ type BottomTab = (typeof BOTTOM_TABS)[number]
 const SIDEBAR_EMPTY: Record<Exclude<View, 'explorer'>, string> = {
   agents: 'No agents running',
   runs: 'No runs yet',
-  settings: 'Settings are not available yet'
+  settings: ''
 }
 
 export function App() {
@@ -194,7 +195,11 @@ export function App() {
         ) : (
           <>
             <PanelHeader title={viewLabel} />
-            <EmptyState title={SIDEBAR_EMPTY[view]} />
+            {view === 'settings' ? (
+              <ProvidersPanel api={api} />
+            ) : (
+              <EmptyState title={SIDEBAR_EMPTY[view]} />
+            )}
           </>
         )}
       </aside>

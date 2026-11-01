@@ -3,7 +3,7 @@ from functools import lru_cache
 from ipaddress import ip_address
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # apps/backend/app/config.py -> repository root
@@ -34,6 +34,25 @@ class Settings(BaseSettings):
     ollama_num_ctx: int = 8192
     # Local generation of a long answer can take minutes on modest hardware.
     ollama_timeout_s: float = 600
+
+    # Hosted providers (OpenAI-compatible APIs). A provider without a key is not used.
+    groq_api_key: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("HEXMIND_GROQ_API_KEY", "GROQ_API_KEY")
+    )
+    groq_model: str = "openai/gpt-oss-120b"
+    gemini_api_key: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("HEXMIND_GEMINI_API_KEY", "GEMINI_API_KEY")
+    )
+    gemini_model: str = "gemini-3.5-flash"
+
+    # Provider selection policy: tried in this order, skipping unconfigured or unavailable
+    # providers. Optional per-complexity orders ({"low": ["ollama", ...]}) override it.
+    provider_order: list[str] = ["groq", "gemini", "ollama"]
+    provider_order_by_complexity: dict[str, list[str]] = {}
+    # How long a provider is skipped after quota exhaustion (unless it sends Retry-After).
+    quota_cooldown_s: float = 300
+    # Agents use native (structured) tool calls; False falls back to CrewAI's text ReAct.
+    native_tool_calling: bool = True
 
     # Approximate token budget for the context bundle sent with chat/router prompts.
     context_budget_tokens: int = 5000

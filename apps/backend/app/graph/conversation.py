@@ -16,6 +16,7 @@ from app.db.models import Conversation, Project, RouterDecision, Run
 from app.events.log import EventType, append_event
 from app.graph.services import Services
 from app.providers.base import ChatMessage, LLMRequest
+from app.providers.router import CallContext
 from app.router.classifier import classify
 from app.router.policy import apply_policy
 from app.router.schemas import Mode, RoutePlan
@@ -109,7 +110,8 @@ def build_conversation_graph(services: Services):
                     ),
                 ],
                 max_tokens=1200,
-            )
+            ),
+            CallContext(complexity=state["plan"].complexity),
         )
         llm = {
             "provider": result.provider,

@@ -1,0 +1,114 @@
+# Benchmark task set (plan §9 M4/M7). Each task starts from `seed/` (a small CommonJS to-do
+# core). After a run, `acceptance/<slug>.test.js` is copied into the result and run in the
+# sandbox; agents never see it. `reference/<slug>/` is a known-good solution used only to
+# validate the acceptance test (it must fail on the seed and pass on the reference).
+#
+# `expected_complexity` is the label used to evaluate routing; it was assigned by the author
+# of this file and should be reviewed by a second team member before M7 (see
+# docs/routing-labels.md for definitions).
+
+tasks:
+  - slug: delete-todo
+    expected_complexity: low
+    prompt: >-
+      Add a pure function deleteTodo(todos, id) to src/todos.js that returns a new array
+      without the todo with that id (unchanged if the id does not exist). Export it and add tests.
+
+  - slug: count-remaining
+    expected_complexity: low
+    prompt: >-
+      Add countRemaining(todos) to src/todos.js returning how many todos are not done.
+      Export it and add tests.
+
+  - slug: validate-title
+    expected_complexity: low
+    prompt: >-
+      Make addTodo in src/todos.js trim the title and throw an Error with the message
+      "title required" when the title is empty or only whitespace. Add tests.
+
+  - slug: clear-completed
+    expected_complexity: low
+    prompt: >-
+      Add clearCompleted(todos) to src/todos.js returning a new array with only the todos that
+      are not done. Export it and add tests.
+
+  - slug: rename-todo
+    expected_complexity: low
+    prompt: >-
+      Add renameTodo(todos, id, title) to src/todos.js that returns a new array where the todo
+      with that id has the new trimmed title; it throws an Error "title required" for an empty
+      title and leaves other todos unchanged. Export it and add tests.
+
+  - slug: filter-module
+    expected_complexity: medium
+    prompt: >-
+      Create src/filter.js exporting filterTodos(todos, filter) where filter is "all", "active"
+      (not done) or "done"; any other value throws an Error "unknown filter". Also export
+      FILTERS = ["all", "active", "done"]. Add tests in src/filter.test.js.
+
+  - slug: storage
+    expected_complexity: medium
+    prompt: >-
+      Create src/storage.js exporting serialize(todos) that returns a JSON string, and
+      deserialize(text) that returns the todos array. deserialize must return [] for invalid
+      JSON, for JSON that is not an array, and must drop entries that are not objects with a
+      numeric id, a string title and a boolean done. Add tests.
+
+  - slug: due-dates
+    expected_complexity: medium
+    prompt: >-
+      Support due dates. addTodo(todos, title, dueDate) in src/todos.js stores dueDate (an ISO
+      date string like "2026-01-31") or null when omitted. Create src/dates.js exporting
+      isOverdue(todo, today) that returns true when the todo is not done and its dueDate is
+      before today (both ISO date strings); todos without a dueDate are never overdue. Add tests.
+
+  - slug: sorting
+    expected_complexity: medium
+    prompt: >-
+      Create src/sort.js exporting sortTodos(todos, by) returning a new sorted array.
+      by = "title" sorts alphabetically case-insensitively, "id" by id ascending, and "status"
+      puts open todos before done ones, keeping the original order otherwise (stable). Any
+      other value throws an Error "unknown sort". Add tests.
+
+  - slug: bulk-actions
+    expected_complexity: medium
+    prompt: >-
+      Add to src/todos.js: completeAll(todos) marking every todo done, and toggleAll(todos)
+      which marks all todos done unless they already all are, in which case it marks them all
+      open. Both return new arrays. Export them and add tests.
+
+  - slug: undo-history
+    expected_complexity: high
+    prompt: >-
+      Create src/history.js exporting createHistory(initial) that returns an object with
+      current(), apply(fn) (sets the state to fn(current()) and clears redo), undo() and redo()
+      (each returns false when there is nothing to undo/redo, true otherwise), canUndo() and
+      canRedo(). States must not be mutated. Add tests covering a sequence of addTodo/toggleTodo
+      calls.
+
+  - slug: tags-search
+    expected_complexity: high
+    prompt: >-
+      Add tags. Create src/tags.js exporting addTag(todos, id, tag) and removeTag(todos, id,
+      tag); tags are stored lower-cased and trimmed in a `tags` array on the todo, without
+      duplicates, and empty tags throw an Error "tag required". Also export
+      searchTodos(todos, query) returning todos whose title or tags contain the query
+      case-insensitively (an empty query returns all todos). Todos without a tags array must
+      work. Add tests.
+
+  - slug: priorities
+    expected_complexity: high
+    prompt: >-
+      Add priorities. Create src/priority.js exporting PRIORITIES = ["low", "medium", "high"],
+      setPriority(todos, id, priority) (throws Error "unknown priority" for other values) and
+      nextTodo(todos) returning the open todo with the highest priority, preferring the lowest
+      id among equals, or null when nothing is open. Todos without a priority count as "medium".
+      Add tests.
+
+  - slug: stats
+    expected_complexity: high
+    prompt: >-
+      Create src/stats.js exporting summarize(todos, today) returning { total, done, remaining,
+      overdue, completionRate } where overdue counts open todos whose dueDate (ISO date string,
+      optional) is before today, and completionRate is done/total rounded to two decimals (0
+      for no todos). Add tests.

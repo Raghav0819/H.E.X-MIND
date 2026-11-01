@@ -15,6 +15,8 @@ from app.graph.background import BackgroundTasks
 from app.graph.services import Services
 from app.memory.store import Memory, OllamaEmbedding
 from app.providers.ollama import OllamaAdapter
+from app.providers.openai_compat import GEMINI_BASE_URL, GROQ_BASE_URL, OpenAICompatAdapter
+from app.providers.pricing import Pricing
 from app.providers.router import ProviderRouter
 
 
@@ -28,6 +30,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         num_ctx=settings.ollama_num_ctx,
         timeout_s=settings.ollama_timeout_s,
     )
+    pricing = Pricing.load()
+    hosted = [
+        OpenAICompatAdapter(
+            name="groq",
+            base_url=GROQ_BASE_URL,
+            api_key=settings.groq_api_key.get_secret_value() if settings.groq_api_key else None,
+            model=settings.groq_model,
+            pricing=pricing,
+        ),
+        OpenAICompatAdapter(
+            name="gemini",
+            base_url=GEMINI_BASE_URL,
+            api_key=settings.gemini_api_key.get_secret_value() if settings.gemini_api_key else None,
+            model=settings.gemini_model,
+            pricing=pricing,
+            requires_thought_signatures=True,
+        ),
+    ]
     memory = None
     if settings.memory_enabled:
         memory = Memory(
@@ -37,7 +57,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     services = Services(
         settings=settings,
         sessionmaker=sessionmaker,
-        providers=ProviderRouter([ollama], sessionmaker),
+        providers=ProviderRouter(
+            [ollama, *hosted],
+            sessionmaker,
+            order=settings.provider_order,
+            order_by_complexity=settings.provider_order_by_complexity,
+            quota_cooldown_s=settings.quota_cooldown_s,
+        ),
         context=ContextManager(settings.context_budget_tokens),
         background=BackgroundTasks(),
         memory=memory,
@@ -47,7 +73,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
         await services.background.cancel_all()
-        await ollama.aclose()
+        for adapter in (ollama, *hosted):
+            await adapter.aclose()
         await engine.dispose()
 
     app = FastAPI(title="H.E.X Mind Backend", version=__version__, lifespan=lifespan)

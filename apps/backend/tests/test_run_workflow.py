@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from sqlalchemy import select
 
 from app.db.models import CheckResult, FileChange, LLMCall, Review, Run, Task
-from app.providers.base import Completion, LLMRequest, ProviderError
+from app.providers.base import Completion, LLMRequest, ProviderError, ToolCall
 from app.sandbox.runner import docker_available
 from app.workspace import git
 from tests.conftest import ScriptedAdapter, router_json, use_adapter
@@ -96,23 +96,32 @@ FILES = {
 }
 
 
-def _action(tool: str, args: dict) -> str:
-    return f"Thought: I will use {tool}.\nAction: {tool}\nAction Input: {json.dumps(args)}"
+def _action(tool: str, args: dict, native: bool = True) -> Completion:
+    """A tool request: a structured tool call (native mode) or CrewAI text ReAct."""
+    if native:
+        call = ToolCall(id=f"call_{uuid.uuid4().hex[:8]}", name=tool, arguments=args)
+        return Completion(tool_calls=[call])
+    return Completion(
+        content=f"Thought: I will use {tool}.\nAction: {tool}\nAction Input: {json.dumps(args)}"
+    )
 
 
-def _final(answer: str) -> str:
-    return f"Thought: I now know the final answer\nFinal Answer: {answer}"
+def _final(answer: str, native: bool = True) -> Completion:
+    if native:
+        return Completion(content=answer)
+    return Completion(content=f"Thought: I now know the final answer\nFinal Answer: {answer}")
 
 
 class AgentScript:
     """Plays the Router, Planner, Coder and Reviewer. The Reviewer requests changes once for
     the filter task to exercise the review loop."""
 
-    def __init__(self) -> None:
+    def __init__(self, native: bool = True) -> None:
+        self.native = native
         self.steps: defaultdict[str, int] = defaultdict(int)
 
     def __call__(self, request: LLMRequest) -> Completion:
-        prompt = "\n".join(m.content for m in request.messages)
+        prompt = "\n".join(m.content or "" for m in request.messages)
         if request.purpose == "router":
             return Completion(
                 content=router_json(
@@ -124,7 +133,7 @@ class AgentScript:
                 )
             )
         if request.purpose == "planner":
-            return Completion(content=_final(json.dumps(PLAN)))
+            return _final(json.dumps(PLAN), self.native)
         if request.purpose == "coder":
             title = re.search(r"(?m)^Task: (.+)$", prompt).group(1).strip()  # type: ignore[union-attr]
             round_key = f"coder:{title}:{prompt.count('Previous attempt was not accepted')}"
@@ -135,8 +144,8 @@ class AgentScript:
                 files = [("src/filter.js", FILTER_JS_V2)]
             if step < len(files):
                 path, content = files[step]
-                return Completion(content=_action("write_file", {"path": path, "content": content}))
-            return Completion(content=_final(f"Implemented {title}; tests pass."))
+                return _action("write_file", {"path": path, "content": content}, self.native)
+            return _final(f"Implemented {title}; tests pass.", self.native)
         if request.purpose == "reviewer":
             title = re.search(r'for the task "(.+?)"', prompt).group(1)  # type: ignore[union-attr]
             self.steps[f"review:{title}"] += 1
@@ -150,7 +159,7 @@ class AgentScript:
                 }
             else:
                 verdict = {"verdict": "approved", "findings": [], "summary": "looks good"}
-            return Completion(content=_final(json.dumps(verdict)))
+            return _final(json.dumps(verdict), self.native)
         return Completion(content="An answer.")
 
 
@@ -285,7 +294,7 @@ class LazyCoderScript:
     def __call__(self, request: LLMRequest) -> Completion:
         if request.purpose == "router":
             return Completion(content=router_json(request_type="code_edit", complexity="low"))
-        prompt = "\n".join(m.content for m in request.messages)
+        prompt = "\n".join(m.content or "" for m in request.messages)
         # Each round's feedback replaces the previous one, so it identifies the round.
         attempt = (
             2 if "ran NO tests" in prompt else 1 if "did not change any files" in prompt else 0
@@ -293,18 +302,14 @@ class LazyCoderScript:
         step = self.steps[attempt]
         self.steps[attempt] += 1
         if attempt == 0:  # claims success without touching a file
-            return Completion(content=_final("Implemented the todo model; all tests pass."))
+            return _final("Implemented the todo model; all tests pass.")
         if attempt == 1:  # code but no tests
             if step == 0:
-                return Completion(
-                    content=_action("write_file", {"path": "src/todos.js", "content": TODOS_JS})
-                )
-            return Completion(content=_final("Added src/todos.js."))
+                return _action("write_file", {"path": "src/todos.js", "content": TODOS_JS})
+            return _final("Added src/todos.js.")
         if step == 0:
-            return Completion(
-                content=_action("write_file", {"path": "src/todos.test.js", "content": TODOS_TEST})
-            )
-        return Completion(content=_final("Added tests; they pass."))
+            return _action("write_file", {"path": "src/todos.test.js", "content": TODOS_TEST})
+        return _final("Added tests; they pass.")
 
 
 async def test_claims_without_changes_or_tests_are_not_accepted(
@@ -334,7 +339,7 @@ async def test_coder_that_never_writes_fails_the_run(
     def handler(request: LLMRequest) -> Completion:
         if request.purpose == "router":
             return Completion(content=router_json(request_type="code_edit", complexity="low"))
-        return Completion(content=_final("Done. Everything works."))
+        return _final("Done. Everything works.")
 
     use_adapter(app, ScriptedAdapter(handler))
 
@@ -424,3 +429,55 @@ async def test_worker_stops_when_its_lease_is_taken(app: FastAPI, empty_repo: Pa
     assert lost is True
     with pytest.raises(asyncio.CancelledError):
         await work
+
+
+async def test_text_react_mode_still_works(
+    app: FastAPI, client: httpx.AsyncClient, empty_repo: Path
+) -> None:
+    """With native tool calling off, agents use CrewAI's text ReAct format."""
+    app.state.services.settings.native_tool_calling = False
+    use_adapter(app, ScriptedAdapter(AgentScript(native=False)))
+
+    exchange = await _start_run(client, empty_repo, "Build a todo module with filtering")
+    await app.state.services.background.wait_all()
+
+    async with app.state.sessionmaker() as session:
+        run = await session.get(Run, uuid.UUID(exchange["run_id"]))
+        statuses = sorted(await session.scalars(select(Task.status)))
+    assert run is not None and run.status == "awaiting_approval"
+    assert statuses == ["completed", "completed"]
+
+
+async def test_changes_without_an_accepted_task_are_not_offered(
+    app: FastAPI, client: httpx.AsyncClient, empty_repo: Path
+) -> None:
+    """A Coder that writes code but never gets its checks to pass leaves a failed run, not a
+    diff awaiting approval."""
+    steps: defaultdict[int, int] = defaultdict(int)
+
+    def handler(request: LLMRequest) -> Completion:
+        if request.purpose == "router":
+            return Completion(content=router_json(request_type="code_edit", complexity="low"))
+        prompt = "\n".join(m.content or "" for m in request.messages)
+        attempt = prompt.count("check is failing")
+        steps[attempt] += 1
+        if steps[attempt] == 1:  # each round writes code (different each time) but no tests
+            return _action(
+                "write_file", {"path": "src/todos.js", "content": f"{TODOS_JS}// round {attempt}\n"}
+            )
+        return _final("Done.")
+
+    use_adapter(app, ScriptedAdapter(handler))
+
+    exchange = await _start_run(client, empty_repo, "Add a todo model")
+    await app.state.services.background.wait_all()
+
+    async with app.state.sessionmaker() as session:
+        run = await session.get(Run, uuid.UUID(exchange["run_id"]))
+        changes = list(await session.scalars(select(FileChange)))
+    assert run is not None and run.status == "failed"
+    assert changes == []
+    events = (await client.get(f"/api/runs/{run.id}/events")).json()
+    assert "diff_ready" not in [e["type"] for e in events]
+    assert "1 file(s) were changed but none passed" in events[-1]["payload"]["error"]
+    assert not Path(run.worktree_path or "").exists()

@@ -1,10 +1,19 @@
+import json
+import re
+import uuid
 from decimal import Decimal
+from typing import Any
 
 import httpx
 
-from app.providers.base import Completion, LLMRequest, ProviderError, ProviderHealth
-
-_RETRYABLE_STATUS = frozenset({408, 429, 500, 502, 503, 504})
+from app.providers.base import (
+    ChatMessage,
+    Completion,
+    LLMRequest,
+    ProviderError,
+    ProviderHealth,
+    ToolCall,
+)
 
 
 class OllamaAdapter:
@@ -16,7 +25,7 @@ class OllamaAdapter:
         model: str,
         *,
         num_ctx: int = 8192,
-        timeout_s: float = 180.0,
+        timeout_s: float = 600.0,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.model = model
@@ -45,9 +54,9 @@ class OllamaAdapter:
         return ProviderHealth(provider=self.name, available=True, model=self.model)
 
     async def complete(self, request: LLMRequest) -> Completion:
-        body: dict[str, object] = {
+        body: dict[str, Any] = {
             "model": self.model,
-            "messages": [m.model_dump() for m in request.messages],
+            "messages": [_to_ollama(m) for m in request.messages],
             "stream": False,
             "options": {
                 "temperature": request.temperature,
@@ -57,26 +66,100 @@ class OllamaAdapter:
         }
         if request.json_schema is not None:
             body["format"] = request.json_schema
+        if request.tools:
+            body["tools"] = request.tools
         if request.stop:
-            body["options"]["stop"] = request.stop  # type: ignore[index]
+            body["options"]["stop"] = request.stop
 
         try:
             response = await self._client.post("/api/chat", json=body)
         except httpx.TimeoutException as exc:
-            raise ProviderError(f"timeout: {exc}", retryable=True) from exc
+            raise ProviderError(f"timeout: {exc}", kind="timeout") from exc
         except httpx.TransportError as exc:
-            raise ProviderError(f"connection error: {exc}", retryable=True) from exc
+            raise ProviderError(f"connection error: {exc}", kind="connection") from exc
 
         if response.status_code != 200:
-            raise ProviderError(
-                f"HTTP {response.status_code}: {response.text[:200]}",
-                retryable=response.status_code in _RETRYABLE_STATUS,
-            )
+            text = response.text[:300]
+            if response.status_code == 404 or "not found" in text:
+                kind = "model_unavailable"
+            elif "does not support tools" in text:
+                kind = "bad_request"
+            elif response.status_code >= 500 or response.status_code in (408, 429):
+                kind = "server"
+            else:
+                kind = "bad_request"
+            raise ProviderError(f"HTTP {response.status_code}: {text}", kind=kind)  # type: ignore[arg-type]
 
         data = response.json()
+        message = data.get("message", {})
+        content = message.get("content") or ""
+        tool_calls = [_from_ollama_call(call) for call in message.get("tool_calls") or []]
+        if request.tools and not tool_calls:
+            # Some models (e.g. qwen2.5-coder) print the call as JSON text instead of using
+            # Ollama's structured tool_calls; recover it, but only for tools actually offered.
+            offered = {t.get("function", {}).get("name") for t in request.tools}
+            tool_calls = text_tool_calls(content, offered)
+            if tool_calls:
+                content = ""
         return Completion(
-            content=data.get("message", {}).get("content", ""),
+            content=content,
+            tool_calls=tool_calls,
             input_tokens=data.get("prompt_eval_count"),
             output_tokens=data.get("eval_count"),
             est_cost_usd=Decimal(0),
         )
+
+
+def _to_ollama(message: ChatMessage) -> dict[str, Any]:
+    out: dict[str, Any] = {"role": message.role, "content": message.content or ""}
+    if message.tool_calls:
+        out["tool_calls"] = [
+            {"function": {"name": c.name, "arguments": c.arguments}} for c in message.tool_calls
+        ]
+    if message.role == "tool" and message.name:
+        out["tool_name"] = message.name
+    return out
+
+
+_TOOL_CALL_TAG = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
+_FENCE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.DOTALL)
+
+
+def text_tool_calls(content: str, offered: set[str | None]) -> list[ToolCall]:
+    """Tool calls a model wrote as JSON text: a bare object or list, a ```json fence, or
+    <tool_call> tags. Anything else, or a name that was not offered, yields no calls."""
+    text = content.strip()
+    tagged = _TOOL_CALL_TAG.findall(text)
+    candidates = tagged or [_FENCE.sub(r"\1", text)]
+    calls: list[ToolCall] = []
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except ValueError:
+            return []
+        for item in parsed if isinstance(parsed, list) else [parsed]:
+            if not isinstance(item, dict):
+                return []
+            name = item.get("name")
+            arguments = item.get("arguments", item.get("parameters", {}))
+            if name not in offered or not isinstance(arguments, dict):
+                return []
+            calls.append(
+                ToolCall(id=f"call_{uuid.uuid4().hex[:12]}", name=name, arguments=arguments)
+            )
+    return calls
+
+
+def _from_ollama_call(call: dict[str, Any]) -> ToolCall:
+    function = call.get("function", {})
+    arguments = function.get("arguments") or {}
+    if isinstance(arguments, str):  # some models return a JSON string
+        try:
+            arguments = json.loads(arguments)
+        except ValueError:
+            arguments = {"_raw": arguments}
+    return ToolCall(
+        id=call.get("id") or f"call_{uuid.uuid4().hex[:12]}",
+        name=function.get("name", ""),
+        arguments=arguments,
+    )

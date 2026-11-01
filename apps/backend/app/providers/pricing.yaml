@@ -1,0 +1,27 @@
+# API prices in USD per million tokens, used for *estimated* cost in llm_calls.
+#
+# These figures were entered from memory of the providers' public price pages and have NOT been
+# checked against current pricing. Before reporting costs (M7), verify each entry on the
+# provider's pricing page and set `last_verified` to that date. Models not listed get no cost
+# estimate. Local Ollama inference has no API charge and is not listed here.
+last_verified: null
+
+models:
+  groq/openai/gpt-oss-120b:
+    input_per_mtok: 0.15
+    output_per_mtok: 0.75
+  groq/openai/gpt-oss-20b:
+    input_per_mtok: 0.10
+    output_per_mtok: 0.50
+  groq/llama-3.3-70b-versatile:
+    input_per_mtok: 0.59
+    output_per_mtok: 0.79
+  groq/llama-3.1-8b-instant:
+    input_per_mtok: 0.05
+    output_per_mtok: 0.08
+  gemini/gemini-2.5-flash:
+    input_per_mtok: 0.30
+    output_per_mtok: 2.50
+  gemini/gemini-2.5-pro:
+    input_per_mtok: 1.25
+    output_per_mtok: 10.00

@@ -70,7 +70,8 @@ async def classify(
                 purpose="router",
                 messages=messages,
                 json_schema=RouterDecision.model_json_schema(),
-                max_tokens=400,
+                # Reasoning models (gpt-oss, Gemini 3) think before answering; leave room.
+                max_tokens=1500,
                 temperature=0,
             ),
             ctx,

@@ -3,7 +3,7 @@
 **Hivemind Execution X** is an agent-native desktop IDE with live multi-agent observability.
 The plan lives in [HEX_Mind_Refined_Plan.md](HEX_Mind_Refined_Plan.md).
 
-**Current milestone: M3 (worker swarm and safe execution).**
+**Current milestone: M4 (providers, native tool calling, fallback).**
 
 | Milestone | Delivered |
 |---|---|
@@ -11,6 +11,7 @@ The plan lives in [HEX_Mind_Refined_Plan.md](HEX_Mind_Refined_Plan.md).
 | M1 | PostgreSQL schema + Alembic migrations, workspace path guard, file explorer, Monaco editor with tabs and stale-file protection, per-run event log, Ollama provider with logged calls |
 | M2 | Persistent project conversations with Ask / Edit / Auto modes; ContextManager (budgeted, redacted, reads files fresh from disk, rolling summary); LLM Router with schema-validated output, one repair retry, deterministic policy and fallback, all decisions logged; LangGraph conversation and run graphs (worker nodes are labeled **stubs** until M3); typed event schema v1 with generated TypeScript types; run event viewer; routing-label tooling |
 | M3 | Blackboard with atomic claims (`FOR UPDATE SKIP LOCKED`), leases, dependencies and file-overlap scheduling; CrewAI Planner/Coder/Reviewer whose every model call goes through our ProviderRouter; per-run Git worktree from a snapshot of the user's working state; MCP workspace server as the agents' only tool surface; Docker sandbox for checks; ChromaDB coding standards and self-logs; diff review (read-only); **event schema v1 frozen** |
+| M4 | Native (structured) tool calling for agents on every provider; Groq and Gemini adapters (OpenAI-compatible) next to Ollama; configurable provider order (optionally per complexity), health-gated eligibility, bounded retries honouring Retry-After, immediate fallback and cooldown on quota/auth errors, `provider_fallback` events, one `llm_calls` row per attempt, cost estimates from `pricing.yaml`; provider settings panel; validated 14-task benchmark set with hidden acceptance tests |
 
 ## Layout
 
@@ -90,6 +91,30 @@ curl -X POST http://127.0.0.1:8765/api/providers/ollama/test -H "Authorization: 
 ```
 
 > If Electron exits immediately with `Cannot read properties of undefined (reading 'whenReady')`, your shell has `ELECTRON_RUN_AS_NODE=1` set (some editor-integrated terminals do this). Unset it before running `npm run dev`.
+
+## Model providers
+
+H.E.X Mind can use three providers. Each model call tries them in `HEXMIND_PROVIDER_ORDER`, which defaults to Groq, then Gemini, then Ollama.
+
+| Provider | Setup |
+|---|---|
+| Ollama (local) | `ollama pull qwen2.5-coder:7b`. No key needed. Used whenever the hosted providers aren't configured or have failed. |
+| Groq | Put `HEXMIND_GROQ_API_KEY=...` in `.env`. The model is `HEXMIND_GROQ_MODEL`. |
+| Gemini | Put `HEXMIND_GEMINI_API_KEY=...` in `.env`. The model is `HEXMIND_GEMINI_MODEL`. |
+
+A provider without a key is skipped. A provider that hits its quota, or whose key is rejected, falls back to the next provider straight away and is skipped for a cooldown period; the run records this as a `provider_fallback` event. **Settings** (the gear in the activity bar) shows each provider's status, cooldown and remaining rate limit, and has a **Test** button. Keys stay in the backend and are never shown.
+
+Cost estimates come from `apps/backend/app/providers/pricing.yaml`. Those prices are **unverified**, so check them against the providers' pricing pages before reporting costs.
+
+## Benchmarks
+
+`apps/backend/app/evaluation/benchmarks/` holds the fixed task set for the M7 evaluation: 14 tasks on a small to-do code base, each with a hidden acceptance test and a reference solution.
+
+```sh
+cd apps/backend
+uv run python -m app.evaluation.benchmarks validate   # each hidden test fails on the seed and passes on the reference
+uv run python -m app.evaluation.benchmarks sync       # load the tasks into eval_tasks
+```
 
 ## Checks
 

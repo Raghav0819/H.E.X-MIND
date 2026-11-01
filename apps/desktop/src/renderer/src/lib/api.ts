@@ -6,7 +6,32 @@ export interface ProviderHealth {
   provider: string
   available: boolean
   model: string
+  configured?: boolean
   detail: string | null
+}
+
+export interface ProviderStatus {
+  health: ProviderHealth
+  order_position: number | null
+  cooldown_s: number
+  cooldown_reason: string | null
+  rate_limit: Record<string, string>
+}
+
+export interface ProvidersInfo {
+  order: string[]
+  order_by_complexity: Record<string, string[]>
+  providers: Record<string, ProviderStatus>
+}
+
+export interface LlmTestResult {
+  provider: string
+  model: string
+  content: string | null
+  latency_ms: number
+  input_tokens: number | null
+  output_tokens: number | null
+  error: string | null
 }
 
 export interface HealthInfo {

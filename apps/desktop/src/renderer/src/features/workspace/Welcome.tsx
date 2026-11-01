@@ -8,10 +8,16 @@ interface Props {
   workspace: Workspace
 }
 
+export const PROVIDER_LABELS: Record<string, string> = {
+  ollama: 'Ollama (local)',
+  groq: 'Groq',
+  gemini: 'Gemini'
+}
+
 export function Welcome({ status, workspace }: Props) {
   const connected = status.kind === 'connected'
   const health = connected ? status.health : null
-  const ollama = health?.providers['ollama']
+  const providers = health ? Object.values(health.providers) : []
 
   return (
     <div className="welcome">
@@ -70,12 +76,15 @@ export function Welcome({ status, workspace }: Props) {
             ok={health?.db === 'ok'}
             value={health ? (health.db === 'ok' ? 'Connected' : 'Unavailable') : 'Unknown'}
           />
-          <ReadinessRow
-            label="Ollama"
-            ok={ollama?.available === true}
-            value={ollama ? (ollama.available ? ollama.model : 'Unavailable') : 'Unknown'}
-            detail={ollama?.detail ?? undefined}
-          />
+          {providers.map((p) => (
+            <ReadinessRow
+              key={p.provider}
+              label={PROVIDER_LABELS[p.provider] ?? p.provider}
+              ok={p.available}
+              value={p.available ? p.model : p.configured === false ? 'Not configured' : 'Unavailable'}
+              detail={p.detail ?? undefined}
+            />
+          ))}
         </dl>
       </section>
     </div>

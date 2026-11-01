@@ -89,6 +89,7 @@ class RunWorkflow:
     worktree: Path | None = None
     base: str | None = None
     request: str = ""
+    complexity: str | None = None
     mcp: McpWorkspace | None = None
 
     # ---------- helpers ----------
@@ -110,8 +111,11 @@ class RunWorkflow:
         return HexLLM(
             router=self.services.providers,
             loop=self.loop,
-            ctx=CallContext(run_id=self.run_id, task_id=task_id, agent_id=agent_id),
+            ctx=CallContext(
+                run_id=self.run_id, task_id=task_id, agent_id=agent_id, complexity=self.complexity
+            ),
             purpose=purpose,  # type: ignore[arg-type]
+            native_tools=self.services.settings.native_tool_calling,
         )
 
     def _tools(self, names: tuple[str, ...], task_id: uuid.UUID | None, agent_id: str):
@@ -155,6 +159,7 @@ class RunWorkflow:
                 else None
             )
         self.request = message.content if message else run.title
+        self.complexity = run.complexity
         self.workspace_root = Path(project.workspace_path)
 
         if not await run_in_threadpool(git.is_repo, self.workspace_root):
@@ -540,6 +545,14 @@ class RunWorkflow:
             )
         completed = statuses.count("completed")
 
+        if completed == 0:
+            # Changes that no task got accepted are not offered for approval.
+            detail = (
+                f"{len(changes)} file(s) were changed but none passed checks/review"
+                if changes
+                else "no files were changed"
+            )
+            raise RunAborted(f"No task was completed; {detail}.")
         if changes:
             async with self.services.sessionmaker.begin() as session:
                 for change in changes:
@@ -559,8 +572,6 @@ class RunWorkflow:
                     )
             await self.emit(EventType.DIFF_READY, files=[c.path for c in changes])
             await set_status(self.services, self.run_id, "awaiting_approval")
-        elif completed == 0:
-            raise RunAborted("No task was completed and no files were changed.")
         else:
             await set_status(self.services, self.run_id, "completed", finished=True)
             await self.emit(

@@ -46,6 +46,8 @@ export function describeEvent(event: AgentEvent): string {
       const tokens = p.input_tokens === null ? '' : `, ${p.input_tokens}→${p.output_tokens ?? '?'} tokens`
       return `${p.purpose} ${p.ok ? 'ok' : `failed: ${p.error}`} in ${p.latency_ms} ms${tokens}`
     }
+    case 'provider_fallback':
+      return `${event.payload.from_provider} → ${event.payload.to_provider}: ${event.payload.reason}`
     case 'task_created': {
       const files = event.payload.target_files.length ? ` [${event.payload.target_files.join(', ')}]` : ''
       return `${event.payload.title}${files}`
