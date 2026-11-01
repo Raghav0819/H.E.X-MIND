@@ -97,7 +97,7 @@ class ConversationAgent(BaseAgent):
                 RouterDecision, router_llm, key="router", fallback=_router_fallback
             ),
             on_model_error_callback=model_error_fallback(
-                "router", _INVALID_ROUTER.model_dump_json()
+                RouterDecision, key="router", fallback=_router_fallback
             ),
         )
         answer = LlmAgent(
@@ -301,6 +301,20 @@ async def _start_run(services: Services, turn: dict[str, Any], plan: RoutePlan) 
                 "route": plan.route,
                 "strategy": plan.strategy,
                 "fallback_used": plan.fallback_used,
+            },
+        )
+        # The Router's structured output was validated before the run existed; record that
+        # check in the run's own log so every run's schema checks start with it.
+        await append_event(
+            session,
+            run.id,
+            EventType.SCHEMA_VALIDATED,
+            agent_id="router",
+            payload={
+                "agent": "router",
+                "schema_name": "RouterDecision",
+                "status": turn["router"]["schema_status"],
+                "errors": [str(e)[:300] for e in turn["router"]["errors"]],
             },
         )
         decision = await session.get(RouterDecisionRow, turn["decision_id"])

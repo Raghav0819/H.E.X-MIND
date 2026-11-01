@@ -244,6 +244,24 @@ async def test_agents_build_reviewed_changes_in_an_isolated_worktree(
         assert expected in types, expected
     assert types.count("task_created") == 2
     assert [e["seq"] for e in events] == list(range(1, len(events) + 1))
+    # Monitoring via callbacks: ADK agent callbacks and CrewAI hooks fed the TelemetryHub.
+    started = {(e["payload"]["agent"], e["payload"]["framework"]) for e in events
+               if e["type"] == "agent_started"}  # fmt: skip
+    assert {
+        ("run_orchestrator", "adk"), ("prepare", "adk"), ("plan", "adk"), ("execute", "adk"),
+        ("finalize", "adk"), ("reflection_loop", "adk"), ("coder", "adk"),
+        ("review_gate", "adk"), ("reviewer", "adk"), ("decide", "adk"), ("planner", "crewai"),
+    } <= started  # fmt: skip
+    assert any(fw == "crewai" and agent.startswith("coder_") for agent, fw in started)
+    hooks = Counter((e["payload"]["framework"], e["payload"]["hook"]) for e in events
+                    if e["type"] == "callback_fired")  # fmt: skip
+    assert hooks[("adk", "before_model_callback")] == 3  # the Reviewer's three model calls
+    assert hooks[("adk", "after_model_callback")] == 3
+    assert hooks[("crewai", "step_callback")] > 0 and hooks[("crewai", "task_callback")] > 0
+    schema = [(e["payload"]["agent"], e["payload"]["status"]) for e in events
+              if e["type"] == "schema_validated"]  # fmt: skip
+    assert schema == [("router", "valid"), ("planner", "valid")] + [("reviewer", "valid")] * 3
+    assert types.count("agent_started") == types.count("agent_finished")
     diff_ready = next(e for e in events if e["type"] == "diff_ready")
     assert sorted(diff_ready["payload"]["files"]) == sorted(changes)
     writes = [

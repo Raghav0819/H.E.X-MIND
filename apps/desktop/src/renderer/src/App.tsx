@@ -1,4 +1,5 @@
 import {
+  Activity,
   Bot,
   Files,
   FolderOpen,
@@ -19,6 +20,7 @@ import { EditorArea } from './features/editor/EditorArea'
 import { disposeModel } from './features/editor/monaco'
 import { useEditorTabs } from './features/editor/useEditorTabs'
 import { FileTree } from './features/explorer/FileTree'
+import { ObservabilityView, RunList } from './features/observability/ObservabilityView'
 import { ProvidersPanel } from './features/settings/ProvidersPanel'
 import { DiffView } from './features/runs/DiffView'
 import { RunEventsPanel } from './features/runs/RunEventsPanel'
@@ -28,10 +30,11 @@ import { useWorkspace } from './features/workspace/useWorkspace'
 import { useBackendHealth } from './hooks/useBackendHealth'
 import { useBackend } from './lib/backend'
 
-type View = 'explorer' | 'agents' | 'runs' | 'settings'
+type View = 'explorer' | 'observability' | 'agents' | 'runs' | 'settings'
 
 const VIEWS: { id: View; label: string; icon: LucideIcon }[] = [
   { id: 'explorer', label: 'Explorer', icon: Files },
+  { id: 'observability', label: 'Observability', icon: Activity },
   { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'runs', label: 'Runs', icon: History },
   { id: 'settings', label: 'Settings', icon: Settings }
@@ -40,9 +43,8 @@ const VIEWS: { id: View; label: string; icon: LucideIcon }[] = [
 const BOTTOM_TABS = ['Problems', 'Tasks', 'Agent Events', 'Logs'] as const
 type BottomTab = (typeof BOTTOM_TABS)[number]
 
-const SIDEBAR_EMPTY: Record<Exclude<View, 'explorer'>, string> = {
+const SIDEBAR_EMPTY: Record<Exclude<View, 'explorer' | 'observability' | 'runs'>, string> = {
   agents: 'No agents running',
-  runs: 'No runs yet',
   settings: ''
 }
 
@@ -197,6 +199,13 @@ export function App() {
             <PanelHeader title={viewLabel} />
             {view === 'settings' ? (
               <ProvidersPanel api={api} />
+            ) : view === 'observability' || view === 'runs' ? (
+              <RunList
+                api={api}
+                projectId={project?.id ?? null}
+                selectedRunId={selectedRunId}
+                onSelect={view === 'runs' ? openRun : setSelectedRunId}
+              />
             ) : (
               <EmptyState title={SIDEBAR_EMPTY[view]} />
             )}
@@ -207,6 +216,8 @@ export function App() {
       <main className="editor">
         {diffRunId ? (
           <DiffView api={api} runId={diffRunId} onClose={() => setDiffRunId(null)} />
+        ) : view === 'observability' ? (
+          <ObservabilityView api={api} runId={selectedRunId} />
         ) : project && editor.state.tabs.length > 0 ? (
           <EditorArea projectId={project.id} editor={editor} />
         ) : (

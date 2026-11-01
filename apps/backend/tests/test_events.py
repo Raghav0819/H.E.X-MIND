@@ -26,7 +26,7 @@ async def test_create_run_persists_run_created_event(
     events = (await client.get(f"/api/runs/{run['id']}/events")).json()
     assert len(events) == 1
     event = events[0]
-    assert event["schema_version"] == 1
+    assert event["schema_version"] == 2
     assert event["seq"] == 1
     assert event["type"] == "run_created"
     assert event["run_id"] == run["id"]

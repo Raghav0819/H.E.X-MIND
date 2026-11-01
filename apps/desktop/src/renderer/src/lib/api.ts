@@ -230,10 +230,14 @@ export interface Task {
   complexity: string | null
   priority: number
   claimed_by: string | null
+  claimed_at: string | null
+  lease_expires_at: string | null
   attempts: number
   max_attempts: number
   created_at: string
   updated_at: string
+  /** Ids of the Blackboard tasks this one waits for. */
+  depends_on: string[]
 }
 
 export interface FileDiff {

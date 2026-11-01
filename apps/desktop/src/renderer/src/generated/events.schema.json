@@ -1,5 +1,423 @@
 {
   "$defs": {
+    "A2AMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "enum": [
+            "sent",
+            "received"
+          ],
+          "type": "string"
+        },
+        "peer": {
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "task_state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "direction",
+        "peer",
+        "task_state",
+        "summary"
+      ],
+      "title": "A2AMessage",
+      "type": "object"
+    },
+    "A2AMessageEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/A2AMessage"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 2,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "a2a_message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "A2AMessageEvent",
+      "type": "object"
+    },
+    "AgentFinished": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "type": "string"
+        },
+        "duration_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "framework": {
+          "enum": [
+            "adk",
+            "crewai"
+          ],
+          "type": "string"
+        },
+        "ok": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "agent",
+        "framework",
+        "ok",
+        "duration_ms"
+      ],
+      "title": "AgentFinished",
+      "type": "object"
+    },
+    "AgentFinishedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/AgentFinished"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 2,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "agent_finished",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "AgentFinishedEvent",
+      "type": "object"
+    },
+    "AgentStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "type": "string"
+        },
+        "framework": {
+          "enum": [
+            "adk",
+            "crewai"
+          ],
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "agent",
+        "framework",
+        "kind",
+        "parent"
+      ],
+      "title": "AgentStarted",
+      "type": "object"
+    },
+    "AgentStartedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/AgentStarted"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 2,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "agent_started",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "AgentStartedEvent",
+      "type": "object"
+    },
+    "CallbackFired": {
+      "additionalProperties": false,
+      "description": "One framework callback, e.g. ADK before_model_callback or CrewAI step_callback.",
+      "properties": {
+        "agent": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "framework": {
+          "enum": [
+            "adk",
+            "crewai"
+          ],
+          "type": "string"
+        },
+        "hook": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "framework",
+        "hook",
+        "agent",
+        "detail"
+      ],
+      "title": "CallbackFired",
+      "type": "object"
+    },
+    "CallbackFiredEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/CallbackFired"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 2,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "callback_fired",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "CallbackFiredEvent",
+      "type": "object"
+    },
     "CheckCompleted": {
       "additionalProperties": false,
       "properties": {
@@ -60,7 +478,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -138,7 +556,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -219,7 +637,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -257,6 +675,97 @@
         "payload"
       ],
       "title": "DiffReadyEvent",
+      "type": "object"
+    },
+    "GuardrailTriggered": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": [
+            "blocked",
+            "repaired",
+            "warned"
+          ],
+          "type": "string"
+        },
+        "guardrail": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "guardrail",
+        "action",
+        "reason"
+      ],
+      "title": "GuardrailTriggered",
+      "type": "object"
+    },
+    "GuardrailTriggeredEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/GuardrailTriggered"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 2,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "guardrail_triggered",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "GuardrailTriggeredEvent",
       "type": "object"
     },
     "LLMCallCompleted": {
@@ -371,7 +880,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -436,7 +945,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -474,6 +983,88 @@
         "payload"
       ],
       "title": "LlmCallStartedEvent",
+      "type": "object"
+    },
+    "PromptVariantSelected": {
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "type": "string"
+        },
+        "variant": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "variant"
+      ],
+      "title": "PromptVariantSelected",
+      "type": "object"
+    },
+    "PromptVariantSelectedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/PromptVariantSelected"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 2,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "prompt_variant_selected",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "PromptVariantSelectedEvent",
       "type": "object"
     },
     "ProviderFallback": {
@@ -522,7 +1113,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -610,7 +1201,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -688,7 +1279,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -810,7 +1401,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -896,7 +1487,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -987,7 +1578,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -1089,7 +1680,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -1167,7 +1758,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -1262,7 +1853,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -1300,6 +1891,105 @@
         "payload"
       ],
       "title": "RunStatusChangedEvent",
+      "type": "object"
+    },
+    "SchemaValidated": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "type": "string"
+        },
+        "errors": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "schema_name": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "valid",
+            "repaired",
+            "fallback"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "agent",
+        "schema_name",
+        "status",
+        "errors"
+      ],
+      "title": "SchemaValidated",
+      "type": "object"
+    },
+    "SchemaValidatedEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/SchemaValidated"
+        },
+        "run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 2,
+          "type": "integer"
+        },
+        "seq": {
+          "type": "integer"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "type": {
+          "const": "schema_validated",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "run_id",
+        "seq",
+        "ts",
+        "agent_id",
+        "task_id",
+        "type",
+        "payload"
+      ],
+      "title": "SchemaValidatedEvent",
       "type": "object"
     },
     "TaskBlocked": {
@@ -1340,7 +2030,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -1418,7 +2108,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -1504,7 +2194,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -1615,7 +2305,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -1693,7 +2383,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -1771,7 +2461,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -1866,7 +2556,7 @@
           "type": "string"
         },
         "schema_version": {
-          "const": 1,
+          "const": 2,
           "type": "integer"
         },
         "seq": {
@@ -1907,14 +2597,20 @@
       "type": "object"
     }
   },
-  "description": "H.E.X Mind agent event, schema version 1.",
+  "description": "H.E.X Mind agent event, schema version 2.",
   "discriminator": {
     "mapping": {
+      "a2a_message": "#/$defs/A2AMessageEvent",
+      "agent_finished": "#/$defs/AgentFinishedEvent",
+      "agent_started": "#/$defs/AgentStartedEvent",
+      "callback_fired": "#/$defs/CallbackFiredEvent",
       "check_completed": "#/$defs/CheckCompletedEvent",
       "check_started": "#/$defs/CheckStartedEvent",
       "diff_ready": "#/$defs/DiffReadyEvent",
+      "guardrail_triggered": "#/$defs/GuardrailTriggeredEvent",
       "llm_call_completed": "#/$defs/LlmCallCompletedEvent",
       "llm_call_started": "#/$defs/LlmCallStartedEvent",
+      "prompt_variant_selected": "#/$defs/PromptVariantSelectedEvent",
       "provider_fallback": "#/$defs/ProviderFallbackEvent",
       "review_completed": "#/$defs/ReviewCompletedEvent",
       "review_started": "#/$defs/ReviewStartedEvent",
@@ -1924,6 +2620,7 @@
       "run_created": "#/$defs/RunCreatedEvent",
       "run_failed": "#/$defs/RunFailedEvent",
       "run_status_changed": "#/$defs/RunStatusChangedEvent",
+      "schema_validated": "#/$defs/SchemaValidatedEvent",
       "task_blocked": "#/$defs/TaskBlockedEvent",
       "task_claimed": "#/$defs/TaskClaimedEvent",
       "task_completed": "#/$defs/TaskCompletedEvent",
@@ -1997,6 +2694,27 @@
     },
     {
       "$ref": "#/$defs/RunCancelledEvent"
+    },
+    {
+      "$ref": "#/$defs/AgentStartedEvent"
+    },
+    {
+      "$ref": "#/$defs/AgentFinishedEvent"
+    },
+    {
+      "$ref": "#/$defs/CallbackFiredEvent"
+    },
+    {
+      "$ref": "#/$defs/SchemaValidatedEvent"
+    },
+    {
+      "$ref": "#/$defs/GuardrailTriggeredEvent"
+    },
+    {
+      "$ref": "#/$defs/A2AMessageEvent"
+    },
+    {
+      "$ref": "#/$defs/PromptVariantSelectedEvent"
     }
   ],
   "title": "AgentEvent"

@@ -18,10 +18,12 @@ from app.providers.ollama import OllamaAdapter
 from app.providers.openai_compat import GEMINI_BASE_URL, GROQ_BASE_URL, OpenAICompatAdapter
 from app.providers.pricing import Pricing
 from app.providers.router import ProviderRouter
+from app.telemetry.tracing import setup_tracing
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    setup_tracing(settings)
     engine = create_engine(settings.database_url)
     sessionmaker = create_sessionmaker(engine)
     ollama = OllamaAdapter(

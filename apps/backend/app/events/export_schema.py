@@ -18,7 +18,7 @@ from app.events.schema import PAYLOADS, SCHEMA_VERSION
 class _Envelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[1]
+    schema_version: Literal[SCHEMA_VERSION]  # type: ignore[valid-type]
     event_id: uuid.UUID
     run_id: uuid.UUID
     seq: int

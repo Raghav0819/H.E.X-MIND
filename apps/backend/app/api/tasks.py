@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.api.deps import SessionDep
 from app.api.schemas import TaskClaim, TaskCreate, TaskOut, TaskReview
 from app.blackboard import store
-from app.db.models import Review, Run, Task
+from app.db.models import Review, Run, Task, TaskDependency
 from app.events.log import EventType, append_event
 
 router = APIRouter(prefix="/tasks", tags=["blackboard"])
@@ -33,11 +33,22 @@ async def create_task(body: TaskCreate, session: SessionDep) -> Task:
 
 
 @router.get("", response_model=list[TaskOut])
-async def list_tasks(run_id: uuid.UUID, session: SessionDep) -> list[Task]:
-    result = await session.scalars(
-        select(Task).where(Task.run_id == run_id).order_by(Task.created_at)
+async def list_tasks(run_id: uuid.UUID, session: SessionDep) -> list[TaskOut]:
+    tasks = list(
+        await session.scalars(select(Task).where(Task.run_id == run_id).order_by(Task.created_at))
     )
-    return list(result)
+    edges = await session.execute(
+        select(TaskDependency.task_id, TaskDependency.depends_on).where(
+            TaskDependency.task_id.in_([t.id for t in tasks])
+        )
+    )
+    depends: dict[uuid.UUID, list[uuid.UUID]] = {}
+    for task_id, depends_on in edges:
+        depends.setdefault(task_id, []).append(depends_on)
+    return [
+        TaskOut.model_validate(t).model_copy(update={"depends_on": depends.get(t.id, [])})
+        for t in tasks
+    ]
 
 
 @router.post("/{task_id}/claim", response_model=TaskOut)

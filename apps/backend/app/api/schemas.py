@@ -72,7 +72,7 @@ class RunOut(ORMModel):
 
 
 class EventOut(ORMModel):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     event_id: uuid.UUID = Field(validation_alias="id")
     run_id: uuid.UUID
     seq: int
@@ -139,10 +139,14 @@ class TaskOut(ORMModel):
     complexity: str | None
     priority: int
     claimed_by: str | None
+    claimed_at: datetime | None = None
+    lease_expires_at: datetime | None = None
     attempts: int
     max_attempts: int
     created_at: datetime
     updated_at: datetime
+    # Blackboard dependencies (task ids); filled by the task list endpoint.
+    depends_on: list[uuid.UUID] = []
 
 
 class TaskClaim(BaseModel):

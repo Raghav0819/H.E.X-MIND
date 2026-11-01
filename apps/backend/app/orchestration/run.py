@@ -53,6 +53,7 @@ from app.orchestration.adk import (
 from app.orchestration.services import Services
 from app.providers.router import CallContext
 from app.sandbox.runner import CheckOutcome
+from app.telemetry.hub import TelemetryHub
 from app.workspace import git
 from app.workspace.files import content_hash
 
@@ -99,6 +100,10 @@ class RunWorkflow:
     request: str = ""
     complexity: str | None = None
     mcp: McpWorkspace | None = None
+    telemetry: TelemetryHub = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.telemetry = TelemetryHub(self.services, self.run_id, self.loop)
 
     # ---------- helpers ----------
 
@@ -214,15 +219,30 @@ class RunWorkflow:
         )
         prompt = roles.planner_prompt(self.request, standards)
         plan: roles.Plan | None = None
+        errors: list[str] = []
         for _ in range(2):  # one repair attempt
-            raw = await roles.run_agent(agent, prompt, "A JSON object with a tasks array")
+            raw = await roles.run_agent(
+                agent,
+                prompt,
+                "A JSON object with a tasks array",
+                self.telemetry.crew_callbacks("planner", parent="plan"),
+            )
             try:
                 plan = roles.parse_json_output(raw, roles.Plan)
                 break
             except roles.OutputError as exc:
+                errors.append(str(exc))
                 prompt += (
                     f"\n\nYour previous answer was invalid ({exc}). Answer with valid JSON only."
                 )
+        await self.telemetry.record(
+            EventType.SCHEMA_VALIDATED,
+            agent_id="planner",
+            agent="planner",
+            schema_name="Plan",
+            status="fallback" if plan is None else "repaired" if errors else "valid",
+            errors=[e[:300] for e in errors],
+        )
         if plan is None:
             await self._single_task(note="The Planner's output was invalid; using a single task.")
             return
@@ -334,7 +354,12 @@ class RunWorkflow:
             standards=await self._memory("standards_for", query, k=3),
             lessons=await self._memory("self_logs_for", query, k=2, exclude_run=str(self.run_id)),
         )
-        await run_adk(reflection_loop(self, loop_state), message=f"Implement task: {task.title}")
+        await run_adk(
+            self.telemetry.instrument(
+                reflection_loop(self, loop_state), task_id=task.id, parent="execute"
+            ),
+            message=f"Implement task: {task.title}",
+        )
         if not loop_state.finished:  # defensive: the loop must always end with a decision
             await self._finish_task(
                 task.id, "failed", error="reflection loop ended without a decision"
@@ -585,6 +610,7 @@ class CoderStep(BaseAgent):
                 feedback=st.feedback,
             ),
             "A short summary of the changes and the final check result",
+            wf.telemetry.crew_callbacks(st.worker, parent="coder", task_id=st.task.id),
         )
         # Agents' claims are not evidence: a round that changed no files did nothing,
         # whatever its final answer says.
@@ -632,7 +658,7 @@ class ReviewGate(BaseAgent):
                 roles.ReviewResult, llm, key="review", fallback=_review_fallback
             ),
             on_model_error_callback=model_error_fallback(
-                "review", _review_fallback([]).model_dump_json()
+                roles.ReviewResult, key="review", fallback=_review_fallback
             ),
         )
         super().__init__(
@@ -772,7 +798,9 @@ async def execute_run(
     succeeded = False
     try:
         await run_adk(
-            run_orchestrator(workflow, requires_planning=requires_planning),
+            workflow.telemetry.instrument(
+                run_orchestrator(workflow, requires_planning=requires_planning)
+            ),
             message=f"Execute run {run_id}",
         )
         succeeded = True

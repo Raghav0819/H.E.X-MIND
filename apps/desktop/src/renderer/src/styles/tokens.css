@@ -27,6 +27,10 @@
   --danger: #e5534b;
   --info: #5b9cf5;
 
+  /* Agent frameworks (badges, topology) */
+  --framework-adk: #5b9cf5;
+  --framework-crewai: #e8854a;
+
   /* Typography */
   --font-ui: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-mono: 'Cascadia Code', 'JetBrains Mono', Consolas, ui-monospace, monospace;

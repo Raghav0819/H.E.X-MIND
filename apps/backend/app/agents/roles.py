@@ -1,17 +1,22 @@
-"""Planner, Coder and Reviewer (plan §6), defined with CrewAI and run as single-agent,
-single-task crews from ADK run agents. Outputs are JSON validated with Pydantic; the agents'
-claims are never trusted for facts we can measure (changed files come from git, check results
-from the sandbox)."""
+"""Agent roles (plan §6). Planner and Coder are CrewAI agents, run as single-agent,
+single-task crews from ADK run agents; the Reviewer is an ADK LlmAgent (orchestration.run) whose
+schema and prompt live here. Outputs are JSON validated with Pydantic; the agents' claims are
+never trusted for facts we can measure (changed files come from git, check results from the
+sandbox)."""
 
+import contextlib
 import json
 import re
-from typing import Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 from crewai import Agent, Crew, Process, Task
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field, ValidationError
 
 from app.agents.llm import HexLLM
+
+if TYPE_CHECKING:
+    from app.telemetry.hub import CrewCallbacks
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -91,12 +96,33 @@ def coder(llm: HexLLM, tools: list[BaseTool], max_iter: int) -> Agent:
     )  # fmt: skip
 
 
-async def run_agent(agent: Agent, description: str, expected_output: str) -> str:
+async def run_agent(
+    agent: Agent,
+    description: str,
+    expected_output: str,
+    telemetry: "CrewCallbacks | None" = None,
+) -> str:
+    """Run a single-agent, single-task crew. `telemetry` wires CrewAI's step/task callbacks and
+    before/after kickoff hooks to the TelemetryHub, inside a `crewai.crew` trace span."""
     task = Task(description=description, expected_output=expected_output, agent=agent)
+    hooks: dict[str, Any] = {}
+    if telemetry is not None:
+        hooks = {
+            "step_callback": telemetry.step_callback,
+            "task_callback": telemetry.task_callback,
+            "before_kickoff_callbacks": [telemetry.before_kickoff],
+            "after_kickoff_callbacks": [telemetry.after_kickoff],
+        }
     crew = Crew(
-        agents=[agent], tasks=[task], process=Process.sequential, memory=False, verbose=False
+        agents=[agent],
+        tasks=[task],
+        process=Process.sequential,
+        memory=False,
+        verbose=False,
+        **hooks,
     )
-    result = await crew.kickoff_async()
+    with telemetry.span() if telemetry is not None else contextlib.nullcontext():
+        result = await crew.kickoff_async()
     return result.raw
 
 

@@ -17,10 +17,13 @@ const TASK: Task = {
   complexity: 'low',
   priority: 0,
   claimed_by: 'coder_01',
+  claimed_at: null,
+  lease_expires_at: null,
   attempts: 2,
   max_attempts: 3,
   created_at: '',
-  updated_at: ''
+  updated_at: '',
+  depends_on: []
 }
 
 describe('TasksPanel', () => {
@@ -43,7 +46,7 @@ describe('TasksPanel', () => {
 
 describe('describeEvent (worker events)', () => {
   const base = {
-    schema_version: 1 as const,
+    schema_version: 2 as const,
     event_id: 'e',
     run_id: 'r1',
     seq: 1,

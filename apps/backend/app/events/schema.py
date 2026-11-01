@@ -4,8 +4,10 @@ This is the backend/frontend contract for the live event stream. `append_event` 
 payload against it, and `export_schema` generates the JSON Schema the renderer's TypeScript
 types are built from.
 
-Status: FROZEN at v1 (end of M3). Backend and frontend develop against it in parallel; any
-change needs agreement from all owners and bumps SCHEMA_VERSION.
+Versions: v1 froze at the end of M3. v2 (P1) adds the monitoring events fed by ADK and CrewAI
+callbacks through the TelemetryHub (agent_started, agent_finished, callback_fired,
+schema_validated) and reserves guardrail_triggered, a2a_message and prompt_variant_selected for
+P2/P4. Any change needs agreement from all owners and bumps SCHEMA_VERSION.
 
 Payloads carry `stub: true` when the work they describe was not really performed (M2 worker
 stubs). The UI must label such events instead of presenting them as agent progress.
@@ -16,9 +18,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 Complexity = Literal["low", "medium", "high"]
+Framework = Literal["adk", "crewai"]
 
 
 class EventType(StrEnum):
@@ -43,6 +46,14 @@ class EventType(StrEnum):
     RUN_COMPLETED = "run_completed"
     RUN_FAILED = "run_failed"
     RUN_CANCELLED = "run_cancelled"
+    # v2: monitoring via callbacks (TelemetryHub)
+    AGENT_STARTED = "agent_started"
+    AGENT_FINISHED = "agent_finished"
+    CALLBACK_FIRED = "callback_fired"
+    SCHEMA_VALIDATED = "schema_validated"
+    GUARDRAIL_TRIGGERED = "guardrail_triggered"
+    A2A_MESSAGE = "a2a_message"
+    PROMPT_VARIANT_SELECTED = "prompt_variant_selected"
 
 
 class Payload(BaseModel):
@@ -164,6 +175,54 @@ class RunCancelled(Payload):
     reason: str | None = None
 
 
+class AgentStarted(Payload):
+    agent: str
+    framework: Framework
+    kind: str  # llm | sequential | loop | parallel | custom | crew
+    parent: str | None = None
+
+
+class AgentFinished(Payload):
+    agent: str
+    framework: Framework
+    ok: bool = True
+    duration_ms: int | None = None
+
+
+class CallbackFired(Payload):
+    """One framework callback, e.g. ADK before_model_callback or CrewAI step_callback."""
+
+    framework: Framework
+    hook: str
+    agent: str
+    detail: str | None = None
+
+
+class SchemaValidated(Payload):
+    agent: str
+    schema_name: str
+    status: Literal["valid", "repaired", "fallback"]
+    errors: list[str] = []
+
+
+class GuardrailTriggered(Payload):
+    guardrail: str
+    action: Literal["blocked", "repaired", "warned"]
+    reason: str
+
+
+class A2AMessage(Payload):
+    direction: Literal["sent", "received"]
+    peer: str
+    task_state: str | None = None
+    summary: str | None = None
+
+
+class PromptVariantSelected(Payload):
+    role: str
+    variant: str
+
+
 PAYLOADS: dict[EventType, type[Payload]] = {
     EventType.RUN_CREATED: RunCreated,
     EventType.RUN_STATUS_CHANGED: RunStatusChanged,
@@ -186,4 +245,11 @@ PAYLOADS: dict[EventType, type[Payload]] = {
     EventType.RUN_COMPLETED: RunCompleted,
     EventType.RUN_FAILED: RunFailed,
     EventType.RUN_CANCELLED: RunCancelled,
+    EventType.AGENT_STARTED: AgentStarted,
+    EventType.AGENT_FINISHED: AgentFinished,
+    EventType.CALLBACK_FIRED: CallbackFired,
+    EventType.SCHEMA_VALIDATED: SchemaValidated,
+    EventType.GUARDRAIL_TRIGGERED: GuardrailTriggered,
+    EventType.A2A_MESSAGE: A2AMessage,
+    EventType.PROMPT_VARIANT_SELECTED: PromptVariantSelected,
 }

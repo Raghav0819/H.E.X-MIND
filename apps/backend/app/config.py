@@ -76,6 +76,9 @@ class Settings(BaseSettings):
     sandbox_images: list[str] = ["node:22-alpine", "python:3.11-slim"]
     sandbox_timeout_s: int = 120
 
+    # OpenTelemetry: OTLP/HTTP traces endpoint, e.g. http://127.0.0.1:4318/v1/traces.
+    otlp_endpoint: str | None = None
+
     # RAG store (ChromaDB). Embeddings come from the local Ollama.
     memory_enabled: bool = True
     embedding_model: str = "nomic-embed-text"

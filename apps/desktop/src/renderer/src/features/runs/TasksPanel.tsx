@@ -1,9 +1,6 @@
-import { useEffect, useState } from 'react'
-
 import { EmptyState } from '../../components/Panel'
-import { SETTLED_RUN_STATUSES, type ApiClient, type Run, type Task } from '../../lib/api'
-
-const POLL_MS = 1500
+import type { ApiClient } from '../../lib/api'
+import { useRunTasks } from './useRunTasks'
 
 interface Props {
   api: ApiClient
@@ -12,37 +9,7 @@ interface Props {
 
 /** The run's Blackboard: every task with its real status, owner and attempts. */
 export function TasksPanel({ api, runId }: Props) {
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setTasks([])
-    setError(null)
-    if (!runId) return
-    let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const poll = async () => {
-      try {
-        const [run, list] = await Promise.all([
-          api.get<Run>(`/runs/${runId}`),
-          api.get<Task[]>('/tasks', { run_id: runId })
-        ])
-        if (cancelled) return
-        setTasks(list)
-        setError(null)
-        if (SETTLED_RUN_STATUSES.has(run.status)) return
-      } catch (err) {
-        if (cancelled) return
-        setError(err instanceof Error ? err.message : String(err))
-      }
-      timer = setTimeout(poll, POLL_MS)
-    }
-    void poll()
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [api, runId])
+  const { tasks, error } = useRunTasks(api, runId)
 
   if (!runId) return <EmptyState title="No run selected" />
   if (error) return <EmptyState title="Could not load tasks">{error}</EmptyState>

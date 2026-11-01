@@ -225,3 +225,20 @@ async def test_only_the_lease_holder_can_renew(app: FastAPI, run_id: uuid.UUID) 
         )
         await store.reap_expired_leases(session, run_id)
     assert await renew("w1") is False  # reaped: the lease is gone
+
+
+async def test_task_list_shows_dependencies_and_leases(
+    app: FastAPI, client, run_id: uuid.UUID
+) -> None:
+    first = await _add(app, run_id, "model")
+    second = await _add(app, run_id, "ui", depends_on=[first])
+    await _claim(app, run_id, "w1")
+
+    listed = {
+        t["title"]: t
+        for t in (await client.get("/api/tasks", params={"run_id": str(run_id)})).json()
+    }
+    assert listed["ui"]["depends_on"] == [str(first)] and listed["model"]["depends_on"] == []
+    assert listed["model"]["claimed_by"] == "w1"
+    assert listed["model"]["claimed_at"] and listed["model"]["lease_expires_at"]
+    assert listed["ui"]["lease_expires_at"] is None and listed["ui"]["id"] == str(second)

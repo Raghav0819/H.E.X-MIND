@@ -1,7 +1,7 @@
 /* Generated from the backend event schema (apps/backend/app/events/schema.py). Do not edit; run: npm run gen:events */
 
 /**
- * H.E.X Mind agent event, schema version 1.
+ * H.E.X Mind agent event, schema version 2.
  */
 export type AgentEvent =
   | RunCreatedEvent
@@ -24,14 +24,21 @@ export type AgentEvent =
   | DiffReadyEvent
   | RunCompletedEvent
   | RunFailedEvent
-  | RunCancelledEvent;
+  | RunCancelledEvent
+  | AgentStartedEvent
+  | AgentFinishedEvent
+  | CallbackFiredEvent
+  | SchemaValidatedEvent
+  | GuardrailTriggeredEvent
+  | A2AMessageEvent
+  | PromptVariantSelectedEvent;
 
 export interface RunCreatedEvent {
   agent_id: string | null;
   event_id: string;
   payload: RunCreated;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -47,7 +54,7 @@ export interface RunStatusChangedEvent {
   event_id: string;
   payload: RunStatusChanged;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -63,7 +70,7 @@ export interface RouterDecidedEvent {
   event_id: string;
   payload: RouterDecided;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -82,7 +89,7 @@ export interface TaskCreatedEvent {
   event_id: string;
   payload: TaskCreated;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -99,7 +106,7 @@ export interface TaskClaimedEvent {
   event_id: string;
   payload: TaskClaimed;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -113,7 +120,7 @@ export interface TaskStartedEvent {
   event_id: string;
   payload: TaskStarted;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -127,7 +134,7 @@ export interface ToolCalledEvent {
   event_id: string;
   payload: ToolCalled;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -143,7 +150,7 @@ export interface LlmCallStartedEvent {
   event_id: string;
   payload: LLMCallStarted;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -159,7 +166,7 @@ export interface LlmCallCompletedEvent {
   event_id: string;
   payload: LLMCallCompleted;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -181,7 +188,7 @@ export interface ProviderFallbackEvent {
   event_id: string;
   payload: ProviderFallback;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -197,7 +204,7 @@ export interface CheckStartedEvent {
   event_id: string;
   payload: CheckStarted;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -211,7 +218,7 @@ export interface CheckCompletedEvent {
   event_id: string;
   payload: CheckCompleted;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -227,7 +234,7 @@ export interface ReviewStartedEvent {
   event_id: string;
   payload: ReviewStarted;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -241,7 +248,7 @@ export interface ReviewCompletedEvent {
   event_id: string;
   payload: ReviewCompleted;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -256,7 +263,7 @@ export interface TaskCompletedEvent {
   event_id: string;
   payload: TaskCompleted;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -270,7 +277,7 @@ export interface TaskFailedEvent {
   event_id: string;
   payload: TaskFailed;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -284,7 +291,7 @@ export interface TaskBlockedEvent {
   event_id: string;
   payload: TaskBlocked;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -298,7 +305,7 @@ export interface DiffReadyEvent {
   event_id: string;
   payload: DiffReady;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -312,7 +319,7 @@ export interface RunCompletedEvent {
   event_id: string;
   payload: RunCompleted;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -327,7 +334,7 @@ export interface RunFailedEvent {
   event_id: string;
   payload: RunFailed;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -341,7 +348,7 @@ export interface RunCancelledEvent {
   event_id: string;
   payload: RunCancelled;
   run_id: string;
-  schema_version: 1;
+  schema_version: 2;
   seq: number;
   task_id: string | null;
   ts: string;
@@ -349,4 +356,123 @@ export interface RunCancelledEvent {
 }
 export interface RunCancelled {
   reason: string | null;
+}
+export interface AgentStartedEvent {
+  agent_id: string | null;
+  event_id: string;
+  payload: AgentStarted;
+  run_id: string;
+  schema_version: 2;
+  seq: number;
+  task_id: string | null;
+  ts: string;
+  type: "agent_started";
+}
+export interface AgentStarted {
+  agent: string;
+  framework: "adk" | "crewai";
+  kind: string;
+  parent: string | null;
+}
+export interface AgentFinishedEvent {
+  agent_id: string | null;
+  event_id: string;
+  payload: AgentFinished;
+  run_id: string;
+  schema_version: 2;
+  seq: number;
+  task_id: string | null;
+  ts: string;
+  type: "agent_finished";
+}
+export interface AgentFinished {
+  agent: string;
+  duration_ms: number | null;
+  framework: "adk" | "crewai";
+  ok: boolean;
+}
+export interface CallbackFiredEvent {
+  agent_id: string | null;
+  event_id: string;
+  payload: CallbackFired;
+  run_id: string;
+  schema_version: 2;
+  seq: number;
+  task_id: string | null;
+  ts: string;
+  type: "callback_fired";
+}
+/**
+ * One framework callback, e.g. ADK before_model_callback or CrewAI step_callback.
+ */
+export interface CallbackFired {
+  agent: string;
+  detail: string | null;
+  framework: "adk" | "crewai";
+  hook: string;
+}
+export interface SchemaValidatedEvent {
+  agent_id: string | null;
+  event_id: string;
+  payload: SchemaValidated;
+  run_id: string;
+  schema_version: 2;
+  seq: number;
+  task_id: string | null;
+  ts: string;
+  type: "schema_validated";
+}
+export interface SchemaValidated {
+  agent: string;
+  errors: string[];
+  schema_name: string;
+  status: "valid" | "repaired" | "fallback";
+}
+export interface GuardrailTriggeredEvent {
+  agent_id: string | null;
+  event_id: string;
+  payload: GuardrailTriggered;
+  run_id: string;
+  schema_version: 2;
+  seq: number;
+  task_id: string | null;
+  ts: string;
+  type: "guardrail_triggered";
+}
+export interface GuardrailTriggered {
+  action: "blocked" | "repaired" | "warned";
+  guardrail: string;
+  reason: string;
+}
+export interface A2AMessageEvent {
+  agent_id: string | null;
+  event_id: string;
+  payload: A2AMessage;
+  run_id: string;
+  schema_version: 2;
+  seq: number;
+  task_id: string | null;
+  ts: string;
+  type: "a2a_message";
+}
+export interface A2AMessage {
+  direction: "sent" | "received";
+  peer: string;
+  summary: string | null;
+  task_state: string | null;
+}
+export interface PromptVariantSelectedEvent {
+  agent_id: string | null;
+  event_id: string;
+  payload: PromptVariantSelected;
+  run_id: string;
+  schema_version: 2;
+  seq: number;
+  task_id: string | null;
+  ts: string;
+  type: "prompt_variant_selected";
+}
+export interface PromptVariantSelected {
+  role: string;
+  variant: string;
 }

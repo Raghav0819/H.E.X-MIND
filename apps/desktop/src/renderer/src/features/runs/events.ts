@@ -80,7 +80,35 @@ export function describeEvent(event: AgentEvent): string {
       return event.payload.summary ?? 'completed'
     case 'run_failed':
       return event.payload.error
+    case 'agent_started': {
+      const p = event.payload
+      return `${p.agent} [${p.framework} ${p.kind}]${p.parent ? ` in ${p.parent}` : ''}`
+    }
+    case 'agent_finished': {
+      const p = event.payload
+      return `${p.agent} [${p.framework}] ${p.ok ? 'done' : 'failed'}${p.duration_ms === null ? '' : ` in ${formatMs(p.duration_ms)}`}`
+    }
+    case 'callback_fired': {
+      const p = event.payload
+      return `${p.framework} ${p.hook} (${p.agent})${p.detail ? `: ${p.detail}` : ''}`
+    }
+    case 'schema_validated': {
+      const p = event.payload
+      return `${p.agent} → ${p.schema_name}: ${p.status}${p.errors.length ? ` (${p.errors.length} error(s))` : ''}`
+    }
+    case 'guardrail_triggered':
+      return `${event.payload.guardrail} ${event.payload.action}: ${event.payload.reason}`
+    case 'a2a_message': {
+      const p = event.payload
+      return `${p.direction} ${p.direction === 'sent' ? 'to' : 'from'} ${p.peer}${p.task_state ? ` [${p.task_state}]` : ''}${p.summary ? `: ${p.summary}` : ''}`
+    }
+    case 'prompt_variant_selected':
+      return `${event.payload.role}: ${event.payload.variant}`
     default:
       return JSON.stringify(event.payload)
   }
+}
+
+export function formatMs(ms: number): string {
+  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)}s`
 }

@@ -5,7 +5,7 @@ import { contiguousSeq, describeEvent, isStub, mergeEvents } from './events'
 
 function statusEvent(seq: number, status = 'executing', stub = true): AgentEvent {
   return {
-    schema_version: 1,
+    schema_version: 2,
     event_id: `e${seq}`,
     run_id: 'r1',
     seq,
@@ -58,5 +58,21 @@ describe('describeEvent', () => {
     }
     expect(describeEvent(routed)).toBe('code_edit, medium, run (plan_execute_review), confidence 82%')
     expect(isStub(routed)).toBe(false)
+  })
+})
+
+describe('describeEvent for monitoring events', () => {
+  const base = { schema_version: 2 as const, event_id: 'e', run_id: 'r1', seq: 1, ts: '2026-10-23T10:00:00Z', agent_id: null, task_id: null }
+
+  it('describes callbacks, agents and schema checks', () => {
+    expect(
+      describeEvent({ ...base, type: 'callback_fired', payload: { framework: 'adk', hook: 'after_model_callback', agent: 'reviewer', detail: 'groq/m' } })
+    ).toBe('adk after_model_callback (reviewer): groq/m')
+    expect(
+      describeEvent({ ...base, type: 'agent_finished', payload: { agent: 'planner', framework: 'crewai', ok: true, duration_ms: 2500 } })
+    ).toBe('planner [crewai] done in 2.5s')
+    expect(
+      describeEvent({ ...base, type: 'schema_validated', payload: { agent: 'reviewer', schema_name: 'ReviewResult', status: 'repaired', errors: ['x'] } })
+    ).toBe('reviewer → ReviewResult: repaired (1 error(s))')
   })
 })
