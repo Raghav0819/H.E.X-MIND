@@ -166,7 +166,7 @@ async def fake_run_executor(services, run_id, *, requires_planning: bool, requir
     """Stands in for the agent workflow in conversation-level tests: records the flags it was
     launched with and completes the run."""
     from app.events.log import EventType, append_event
-    from app.graph.run import set_status
+    from app.orchestration.run import set_status
 
     await set_status(services, run_id, "completed", finished=True)
     async with services.sessionmaker.begin() as session:

@@ -1,5 +1,5 @@
 """Planner, Coder and Reviewer (plan §6), defined with CrewAI and run as single-agent,
-single-task crews from LangGraph nodes. Outputs are JSON validated with Pydantic; the agents'
+single-task crews from ADK run agents. Outputs are JSON validated with Pydantic; the agents'
 claims are never trusted for facts we can measure (changed files come from git, check results
 from the sandbox)."""
 
@@ -91,19 +91,6 @@ def coder(llm: HexLLM, tools: list[BaseTool], max_iter: int) -> Agent:
     )  # fmt: skip
 
 
-def reviewer(llm: HexLLM, tools: list[BaseTool], max_iter: int) -> Agent:
-    return Agent(
-        role="Reviewer",
-        goal="Decide whether a change meets its acceptance criteria without regressions.",
-        backstory=(
-            "You are a strict but fair code reviewer. You check correctness, edge cases, tests "
-            "and coding standards, and cite files and lines. You only request changes for real "
-            "problems."
-        ),
-        llm=llm, tools=tools, max_iter=max_iter, allow_delegation=False, verbose=False,
-    )  # fmt: skip
-
-
 async def run_agent(agent: Agent, description: str, expected_output: str) -> str:
     task = Task(description=description, expected_output=expected_output, agent=agent)
     crew = Crew(
@@ -170,7 +157,10 @@ Your final answer: a short summary of what you changed and the final check resul
 def reviewer_prompt(
     *, title: str, criteria: list[str], diff: str, check_summary: str, standards: list[str]
 ) -> str:
-    return f"""Review this change for the task "{title}".
+    return f"""You are a strict but fair code reviewer. You check correctness, edge cases, tests
+and coding standards, and cite files and lines. You only request changes for real problems.
+
+Review this change for the task "{title}".
 
 Acceptance criteria:
 {_bullets(criteria)}
@@ -186,8 +176,8 @@ Diff against the starting point:
 Coding standards:
 {_bullets(standards)}
 
-You may read files or run the `test` check. Approve only if every criterion is met and the
-checks pass. Your final answer must be only a JSON object: {REVIEW_SCHEMA}"""
+Judge from the diff and the check result above. Approve only if every criterion is met and
+the checks pass. Your final answer must be only a JSON object: {REVIEW_SCHEMA}"""
 
 
 def _bullets(items: list[str]) -> str:

@@ -12,7 +12,6 @@ from app.agents.mcp_bridge import McpWorkspace
 MAX_TOOL_OUTPUT = 8000
 
 READ_ONLY = ("list_files", "read_file", "search_code")
-REVIEW = (*READ_ONLY, "run_check")
 CODER = (*READ_ONLY, "write_file", "replace_in_file", "run_check")
 
 ToolListener = Callable[[str, dict[str, Any], bool, str], None]

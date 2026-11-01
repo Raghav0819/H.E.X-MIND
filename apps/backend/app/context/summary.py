@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from app.context.manager import RECENT_MESSAGES, SUMMARY_BATCH
 from app.context.redact import redact
 from app.db.models import Conversation, Message
-from app.graph.services import Services
+from app.orchestration.services import Services
 from app.providers.base import ChatMessage, LLMRequest
 
 # Summarize once at least this many messages have aged out of the recent window.

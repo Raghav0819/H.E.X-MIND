@@ -1,11 +1,13 @@
-"""Run graph (LangGraph): prepare -> [plan] -> execute -> finalize.
+"""Run orchestration on Google ADK: SequentialAgent[prepare -> plan -> execute -> finalize].
 
 - prepare:  snapshot the user's workspace, create an isolated git worktree, start the MCP
             workspace server bound to it.
 - plan:     the Planner breaks the request into Blackboard tasks (medium/high complexity);
             low complexity gets a single task.
-- execute:  a pool of workers claims tasks atomically. Per task: Coder -> sandbox check ->
-            Reviewer (when required), with up to `review_max_rounds` change rounds.
+- execute:  a pool of workers claims tasks atomically. Each claimed task runs a reflection
+            loop, an ADK LoopAgent[coder -> review_gate -> decide]: the CrewAI Coder edits,
+            the sandbox check runs, the ADK Reviewer (Pydantic ReviewResult) judges, and
+            `decide` applies the acceptance rules and escalates to end the loop.
 - finalize: diff the worktree against the snapshot, record file_changes, emit diff_ready, and
             wait for the user's approval. Nothing touches the user's files here.
 
@@ -18,25 +20,37 @@ import json
 import logging
 import re
 import uuid
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
 from fastapi.concurrency import run_in_threadpool
-from langgraph.graph import END, START, StateGraph
+from google.adk.agents import BaseAgent, LlmAgent, LoopAgent, SequentialAgent
+from google.adk.agents.invocation_context import InvocationContext
+from google.adk.events import Event
+from pydantic import PrivateAttr
 from sqlalchemy import select
 
 from app.agents import roles
+from app.agents.adk_llm import HexAdkLlm
 from app.agents.llm import HexLLM
 from app.agents.mcp_bridge import McpWorkspace
-from app.agents.tools import CODER, READ_ONLY, REVIEW, make_tools
+from app.agents.tools import CODER, READ_ONLY, make_tools
 from app.blackboard import store
 from app.context.workspace_scan import list_files, mentioned_files
 from app.db.models import CheckResult, FileChange, Message, Project, Review, Run, Task
 from app.events.log import EventType, append_event
-from app.graph.services import Services
 from app.memory.store import safely
+from app.orchestration.adk import (
+    escalate_event,
+    model_error_fallback,
+    run_adk,
+    schema_guard,
+    state_event,
+)
+from app.orchestration.services import Services
 from app.providers.router import CallContext
 from app.sandbox.runner import CheckOutcome
 from app.workspace import git
@@ -50,12 +64,6 @@ _standards_seeded = False
 
 class RunAborted(RuntimeError):
     """A run cannot proceed for a reason the user can fix (shown in run_failed)."""
-
-
-class RunState(TypedDict):
-    run_id: uuid.UUID
-    requires_planning: bool
-    requires_review: bool
 
 
 async def set_status(
@@ -146,7 +154,7 @@ class RunWorkflow:
 
     # ---------- nodes ----------
 
-    async def prepare(self, state: RunState) -> dict:
+    async def prepare(self) -> None:
         global _standards_seeded
         async with self.services.sessionmaker() as session:
             run = await session.get(Run, self.run_id)
@@ -194,9 +202,9 @@ class RunWorkflow:
         if not _standards_seeded and self.services.memory is not None:
             await self._memory("seed_standards", settings.standards_dir)
             _standards_seeded = True
-        return {}
+        return
 
-    async def plan(self, state: RunState) -> dict:
+    async def plan(self) -> None:
         await set_status(self.services, self.run_id, "planning")
         standards = await self._memory("standards_for", self.request, k=3)
         agent = roles.planner(
@@ -217,7 +225,7 @@ class RunWorkflow:
                 )
         if plan is None:
             await self._single_task(note="The Planner's output was invalid; using a single task.")
-            return {}
+            return
 
         ids: list[uuid.UUID] = []
         async with self.services.sessionmaker.begin() as session:
@@ -238,11 +246,10 @@ class RunWorkflow:
                 except store.DuplicateTask:
                     continue
                 ids.append(task.id)
-        return {}
+        return
 
-    async def single_task(self, state: RunState) -> dict:
+    async def single_task(self) -> None:
         await self._single_task()
-        return {}
 
     async def _single_task(self, note: str | None = None) -> None:
         assert self.worktree is not None
@@ -265,11 +272,11 @@ class RunWorkflow:
                 max_attempts=self.services.settings.review_max_rounds + 1,
             )
 
-    async def execute(self, state: RunState) -> dict:
+    async def execute(self) -> None:
         await set_status(self.services, self.run_id, "executing")
         concurrency = max(1, self.services.settings.worker_concurrency)
         await asyncio.gather(*(self._worker(f"coder_{i + 1:02d}") for i in range(concurrency)))
-        return {}
+        return
 
     async def _worker(self, name: str) -> None:
         lease = timedelta(seconds=self.services.settings.task_lease_s)
@@ -320,81 +327,18 @@ class RunWorkflow:
         await self.emit(EventType.TASK_STARTED, task_id=task.id, agent_id=worker, worker=worker)
 
         query = f"{task.title}\n{task.description}"
-        standards = await self._memory("standards_for", query, k=3)
-        lessons = await self._memory("self_logs_for", query, k=2, exclude_run=str(self.run_id))
-        rounds = self.services.settings.review_max_rounds + 1
-        feedback: str | None = None
-        summary = ""
-        status = "running"
-
-        for round_number in range(1, rounds + 1):
-            before = await self._worktree_fingerprint()
-            agent = roles.coder(
-                self._llm("coder", task.id, worker),
-                self._tools(CODER, task.id, worker),
-                self.services.settings.agent_max_iterations,
+        loop_state = TaskLoopState(
+            task=task,
+            worker=worker,
+            rounds=self.services.settings.review_max_rounds + 1,
+            standards=await self._memory("standards_for", query, k=3),
+            lessons=await self._memory("self_logs_for", query, k=2, exclude_run=str(self.run_id)),
+        )
+        await run_adk(reflection_loop(self, loop_state), message=f"Implement task: {task.title}")
+        if not loop_state.finished:  # defensive: the loop must always end with a decision
+            await self._finish_task(
+                task.id, "failed", error="reflection loop ended without a decision"
             )
-            summary = await roles.run_agent(
-                agent,
-                roles.coder_prompt(
-                    title=task.title,
-                    description=task.description,
-                    criteria=task.acceptance_criteria,
-                    target_files=task.target_files,
-                    standards=standards,
-                    lessons=lessons,
-                    feedback=feedback,
-                ),
-                "A short summary of the changes and the final check result",
-            )
-            # Agents' claims are not evidence: a round that changed no files did nothing,
-            # whatever its final answer says.
-            if await self._worktree_fingerprint() == before:
-                feedback = NO_CHANGES_FEEDBACK
-                continue
-            check = await self._run_check(task.id)
-
-            if not self.requires_review:
-                if _accepted(check):
-                    await self._finish_task(task.id, "completed", summary=summary)
-                    await self._self_log(task, "completed", summary, check)
-                    return
-                feedback = _check_feedback(check)
-                continue
-
-            async with self.services.sessionmaker.begin() as session:
-                await store.transition(session, task.id, "review")
-            review = await self._review(task, check)
-            if review.verdict == "approved" and _accepted(check):
-                await self._finish_task(task.id, "completed", summary=summary)
-                await self._self_log(task, "completed", summary, check)
-                return
-            if review.verdict == "blocked":
-                await self._finish_task(task.id, "blocked", reason=review.summary or "reviewer")
-                await self._self_log(task, "blocked", review.summary, check)
-                return
-            feedback = "\n".join(
-                [f"- {f.file or ''}:{f.line or ''} {f.message}" for f in review.findings]
-                + ([_check_feedback(check)] if not _accepted(check) else [])
-            )
-            async with self.services.sessionmaker.begin() as session:
-                await store.transition(session, task.id, "changes_requested")
-                status = "changes_requested"
-                if round_number < rounds:
-                    await store.transition(session, task.id, "running")
-                    status = "running"
-
-        if status == "changes_requested":
-            reason = f"not accepted after {rounds} review rounds"
-            await self._finish_task(task.id, "blocked", reason=reason)
-        else:
-            error = (
-                f"no file changes after {rounds} attempts"
-                if feedback == NO_CHANGES_FEEDBACK
-                else f"checks still failing after {rounds} attempts"
-            )
-            await self._finish_task(task.id, "failed", error=error)
-        await self._self_log(task, "not_accepted", feedback or summary, None)
 
     async def _worktree_fingerprint(self) -> frozenset[tuple[str, str]]:
         assert self.worktree is not None and self.base is not None
@@ -434,42 +378,21 @@ class RunWorkflow:
             )
         return outcome
 
-    async def _review(self, task: Task, check: CheckOutcome) -> roles.ReviewResult:
+    async def _review_prompt(self, task: Task, check: CheckOutcome) -> str:
         assert self.worktree is not None and self.base is not None
-        await self.emit(
-            EventType.REVIEW_STARTED, task_id=task.id, agent_id="reviewer", reviewer="reviewer"
-        )
         changes = await run_in_threadpool(git.diff, self.worktree, self.base)
         relevant = [c for c in changes if not task.target_files or c.path in task.target_files]
         diff_text = "\n".join(c.diff for c in (relevant or changes))[:MAX_DIFF_FOR_REVIEW]
         standards = await self._memory("standards_for", task.title, k=2)
-        agent = roles.reviewer(
-            self._llm("reviewer", task.id, "reviewer"),
-            self._tools(REVIEW, task.id, "reviewer"),
-            self.services.settings.agent_max_iterations,
-        )
-        prompt = roles.reviewer_prompt(
+        return roles.reviewer_prompt(
             title=task.title,
             criteria=task.acceptance_criteria,
             diff=diff_text or "(no changes)",
             check_summary=_check_summary(check),
             standards=standards,
         )
-        review: roles.ReviewResult | None = None
-        for _ in range(2):
-            raw = await roles.run_agent(agent, prompt, "A JSON object with verdict and findings")
-            try:
-                review = roles.parse_json_output(raw, roles.ReviewResult)
-                break
-            except roles.OutputError as exc:
-                prompt += (
-                    f"\n\nYour previous answer was invalid ({exc}). Answer with valid JSON only."
-                )
-        if review is None:
-            review = roles.ReviewResult(
-                verdict="blocked", summary="The Reviewer did not produce a valid verdict."
-            )
 
+    async def _record_review(self, task: Task, review: roles.ReviewResult) -> None:
         async with self.services.sessionmaker.begin() as session:
             session.add(
                 Review(
@@ -487,7 +410,6 @@ class RunWorkflow:
                 agent_id="reviewer",
                 payload={"verdict": review.verdict, "findings": len(review.findings)},
             )
-        return review
 
     async def _finish_task(
         self,
@@ -535,7 +457,7 @@ class RunWorkflow:
             text=text,
         )
 
-    async def finalize(self, state: RunState) -> dict:
+    async def finalize(self) -> None:
         assert self.worktree is not None and self.base is not None
         assert self.workspace_root is not None
         changes = await run_in_threadpool(git.diff, self.worktree, self.base)
@@ -577,7 +499,7 @@ class RunWorkflow:
             await self.emit(
                 EventType.RUN_COMPLETED, summary="The tasks finished without changing any files."
             )
-        return {}
+        return
 
     async def cleanup(self, *, remove_worktree: bool) -> None:
         if self.mcp is not None:
@@ -586,45 +508,278 @@ class RunWorkflow:
             await run_in_threadpool(git.remove_worktree, self.workspace_root, self.worktree)
 
 
-def build_run_graph(workflow: RunWorkflow):
-    graph = StateGraph(RunState)
-    graph.add_node("prepare", workflow.prepare)
-    graph.add_node("plan", workflow.plan)
-    graph.add_node("single_task", workflow.single_task)
-    graph.add_node("execute", workflow.execute)
-    graph.add_node("finalize", workflow.finalize)
+# ---------- ADK agents ----------
 
-    graph.add_edge(START, "prepare")
-    graph.add_conditional_edges(
-        "prepare",
-        lambda s: "plan" if s["requires_planning"] else "single_task",
-        ["plan", "single_task"],
+
+@dataclass
+class TaskLoopState:
+    """Shared by the agents of one task's reflection loop."""
+
+    task: Task
+    worker: str
+    rounds: int
+    standards: list[str]
+    lessons: list[str]
+    round: int = 0
+    feedback: str | None = None
+    summary: str = ""
+    outcome: str = ""  # "no_change" | "checked"
+    check: CheckOutcome | None = None
+    review: roles.ReviewResult | None = None
+    review_prompt: str = ""
+    finished: bool = False
+
+
+def _review_fallback(errors: list[str]) -> roles.ReviewResult:
+    return roles.ReviewResult(
+        verdict="blocked", summary="The Reviewer did not produce a valid verdict."
     )
-    graph.add_edge("plan", "execute")
-    graph.add_edge("single_task", "execute")
-    graph.add_edge("execute", "finalize")
-    graph.add_edge("finalize", END)
-    return graph.compile()
+
+
+class RunStep(BaseAgent):
+    """A deterministic run step (custom ADK agent) wrapping one RunWorkflow method."""
+
+    _fn: Callable[[], Awaitable[None]] = PrivateAttr()
+
+    def __init__(self, name: str, description: str, fn: Callable[[], Awaitable[None]]) -> None:
+        super().__init__(name=name, description=description)
+        self._fn = fn
+
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
+        await self._fn()
+        yield state_event(self, ctx, **{f"{self.name}_done": True})
+
+
+class CoderStep(BaseAgent):
+    """CrewAI Coder edits files through the MCP tools; then the sandbox check runs."""
+
+    _workflow: "RunWorkflow" = PrivateAttr()
+    _state: TaskLoopState = PrivateAttr()
+
+    def __init__(self, workflow: "RunWorkflow", state: TaskLoopState) -> None:
+        super().__init__(
+            name="coder",
+            description="CrewAI Coder: edits files via MCP tools, then the sandbox check runs.",
+        )
+        self._workflow, self._state = workflow, state
+
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
+        wf, st = self._workflow, self._state
+        st.round += 1
+        st.check, st.review = None, None
+        before = await wf._worktree_fingerprint()
+        agent = roles.coder(
+            wf._llm("coder", st.task.id, st.worker),
+            wf._tools(CODER, st.task.id, st.worker),
+            wf.services.settings.agent_max_iterations,
+        )
+        st.summary = await roles.run_agent(
+            agent,
+            roles.coder_prompt(
+                title=st.task.title,
+                description=st.task.description,
+                criteria=st.task.acceptance_criteria,
+                target_files=st.task.target_files,
+                standards=st.standards,
+                lessons=st.lessons,
+                feedback=st.feedback,
+            ),
+            "A short summary of the changes and the final check result",
+        )
+        # Agents' claims are not evidence: a round that changed no files did nothing,
+        # whatever its final answer says.
+        if await wf._worktree_fingerprint() == before:
+            st.outcome, st.feedback = "no_change", NO_CHANGES_FEEDBACK
+        else:
+            st.outcome = "checked"
+            st.check = await wf._run_check(st.task.id)
+        yield state_event(
+            self,
+            ctx,
+            round=st.round,
+            outcome=st.outcome,
+            check_accepted=bool(st.check and _accepted(st.check)),
+        )
+
+
+class ReviewGate(BaseAgent):
+    """Runs the ADK Reviewer when the round produced checked changes and review is required."""
+
+    _workflow: "RunWorkflow" = PrivateAttr()
+    _state: TaskLoopState = PrivateAttr()
+
+    def __init__(self, workflow: "RunWorkflow", state: TaskLoopState) -> None:
+        llm = HexAdkLlm(
+            router=workflow.services.providers,
+            ctx=CallContext(
+                run_id=workflow.run_id,
+                task_id=state.task.id,
+                agent_id="reviewer",
+                complexity=workflow.complexity,
+            ),
+            purpose="reviewer",
+            max_tokens=2048,
+        )
+        reviewer = LlmAgent(
+            name="reviewer",
+            description="ADK Reviewer: judges the change against the acceptance criteria.",
+            model=llm,
+            instruction=lambda ctx: state.review_prompt,
+            include_contents="none",
+            output_schema=roles.ReviewResult,
+            output_key="review",
+            after_model_callback=schema_guard(
+                roles.ReviewResult, llm, key="review", fallback=_review_fallback
+            ),
+            on_model_error_callback=model_error_fallback(
+                "review", _review_fallback([]).model_dump_json()
+            ),
+        )
+        super().__init__(
+            name="review_gate",
+            description="Reviews checked changes when the strategy requires review.",
+            sub_agents=[reviewer],
+        )
+        self._workflow, self._state = workflow, state
+
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
+        wf, st = self._workflow, self._state
+        if st.outcome != "checked" or not wf.requires_review:
+            yield state_event(self, ctx, review_skipped=True)
+            return
+        assert st.check is not None
+        async with wf.services.sessionmaker.begin() as session:
+            await store.transition(session, st.task.id, "review")
+        await wf.emit(
+            EventType.REVIEW_STARTED, task_id=st.task.id, agent_id="reviewer", reviewer="reviewer"
+        )
+        st.review_prompt = await wf._review_prompt(st.task, st.check)
+        async for event in self.sub_agents[0].run_async(ctx):
+            yield event
+        st.review = roles.ReviewResult.model_validate(ctx.session.state["review"])
+        await wf._record_review(st.task, st.review)
+
+
+class DecideStep(BaseAgent):
+    """Applies the acceptance rules; escalates to end the loop once the task is decided."""
+
+    _workflow: "RunWorkflow" = PrivateAttr()
+    _state: TaskLoopState = PrivateAttr()
+
+    def __init__(self, workflow: "RunWorkflow", state: TaskLoopState) -> None:
+        super().__init__(
+            name="decide",
+            description="Accepts, retries or stops the task from real check and review results.",
+        )
+        self._workflow, self._state = workflow, state
+
+    async def _finish(self, ctx, status: str, **detail: str) -> Event:
+        wf, st = self._workflow, self._state
+        await wf._finish_task(st.task.id, status, **detail)
+        log_outcome = status if status in ("completed", "blocked") else "not_accepted"
+        await wf._self_log(st.task, log_outcome, st.feedback or st.summary, st.check)
+        st.finished = True
+        return escalate_event(self, ctx, decision=status)
+
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
+        wf, st = self._workflow, self._state
+        last = st.round >= st.rounds
+
+        if st.outcome == "no_change":
+            if last:
+                yield await self._finish(
+                    ctx, "failed", error=f"no file changes after {st.rounds} attempts"
+                )
+            else:
+                yield state_event(self, ctx, decision="retry")
+            return
+
+        check = st.check
+        assert check is not None
+        if not wf.requires_review:
+            if _accepted(check):
+                yield await self._finish(ctx, "completed", summary=st.summary)
+                return
+            st.feedback = _check_feedback(check)
+            if last:
+                yield await self._finish(
+                    ctx, "failed", error=f"checks still failing after {st.rounds} attempts"
+                )
+            else:
+                yield state_event(self, ctx, decision="retry")
+            return
+
+        review = st.review
+        assert review is not None
+        if review.verdict == "approved" and _accepted(check):
+            yield await self._finish(ctx, "completed", summary=st.summary)
+            return
+        if review.verdict == "blocked":
+            yield await self._finish(ctx, "blocked", reason=review.summary or "reviewer")
+            return
+        st.feedback = "\n".join(
+            [f"- {f.file or ''}:{f.line or ''} {f.message}" for f in review.findings]
+            + ([_check_feedback(check)] if not _accepted(check) else [])
+        )
+        async with wf.services.sessionmaker.begin() as session:
+            await store.transition(session, st.task.id, "changes_requested")
+            if not last:
+                await store.transition(session, st.task.id, "running")
+        if last:
+            yield await self._finish(
+                ctx, "blocked", reason=f"not accepted after {st.rounds} review rounds"
+            )
+        else:
+            yield state_event(self, ctx, decision="retry")
+
+
+def reflection_loop(workflow: "RunWorkflow", state: TaskLoopState) -> LoopAgent:
+    """Reflection pattern: Coder (CrewAI) -> review gate (ADK Reviewer) -> decide."""
+    return LoopAgent(
+        name="reflection_loop",
+        description="Code, check and review until accepted or out of rounds.",
+        sub_agents=[
+            CoderStep(workflow, state),
+            ReviewGate(workflow, state),
+            DecideStep(workflow, state),
+        ],
+        max_iterations=state.rounds,
+    )
+
+
+def run_orchestrator(workflow: "RunWorkflow", *, requires_planning: bool) -> SequentialAgent:
+    return SequentialAgent(
+        name="run_orchestrator",
+        description="Prepare an isolated worktree, plan, execute tasks, and produce the diff.",
+        sub_agents=[
+            RunStep("prepare", "Snapshot, worktree and MCP workspace server.", workflow.prepare),
+            RunStep(
+                "plan",
+                "Planner crew (or a single task for low complexity) fills the Blackboard.",
+                workflow.plan if requires_planning else workflow.single_task,
+            ),
+            RunStep("execute", "Worker pool runs each task's reflection loop.", workflow.execute),
+            RunStep("finalize", "Diff, file changes, and approval gate.", workflow.finalize),
+        ],
+    )
 
 
 async def execute_run(
     services: Services, run_id: uuid.UUID, *, requires_planning: bool, requires_review: bool
 ) -> None:
-    """Run the workflow; failures mark the run failed with a run_failed event."""
+    """Run the ADK orchestrator; failures mark the run failed with a run_failed event."""
     workflow = RunWorkflow(services, run_id, requires_review=requires_review)
     succeeded = False
     try:
-        await build_run_graph(workflow).ainvoke(
-            {
-                "run_id": run_id,
-                "requires_planning": requires_planning,
-                "requires_review": requires_review,
-            }
+        await run_adk(
+            run_orchestrator(workflow, requires_planning=requires_planning),
+            message=f"Execute run {run_id}",
         )
         succeeded = True
     except Exception as exc:
+        exc = _innermost(exc)
         if not isinstance(exc, RunAborted):
-            logger.exception("run %s failed", run_id)
+            logger.exception("run %s failed", run_id, exc_info=exc)
         async with services.sessionmaker.begin() as session:
             await session.execute(
                 Task.__table__.update()
@@ -642,6 +797,19 @@ async def execute_run(
             run = await session.get(Run, run_id)
             keep = succeeded and run is not None and run.status == "awaiting_approval"
         await workflow.cleanup(remove_worktree=not keep)
+
+
+def _innermost(exc: BaseException) -> BaseException:
+    """ADK wraps agent failures (e.g. DynamicNodeFailError.error); unwrap to the cause."""
+    seen = set()
+    while id(exc) not in seen:
+        seen.add(id(exc))
+        inner = getattr(exc, "error", None)
+        if isinstance(inner, BaseException):
+            exc = inner
+            continue
+        break
+    return exc
 
 
 NO_CHANGES_FEEDBACK = (

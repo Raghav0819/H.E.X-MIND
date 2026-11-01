@@ -369,7 +369,7 @@ async def test_coder_that_never_writes_fails_the_run(
     ],
 )
 def test_zero_test_runs_are_not_accepted(output: str, no_tests: bool) -> None:
-    from app.graph.run import _accepted, _ran_no_tests
+    from app.orchestration.run import _accepted, _ran_no_tests
     from app.sandbox.runner import CheckOutcome
 
     check = CheckOutcome("test", 0, 10, output)
@@ -408,7 +408,7 @@ async def test_worker_stops_when_its_lease_is_taken(app: FastAPI, empty_repo: Pa
 
     from app.blackboard import store
     from app.db.models import Project
-    from app.graph.run import RunWorkflow
+    from app.orchestration.run import RunWorkflow
 
     async with app.state.sessionmaker.begin() as session:
         project = Project(name="p", workspace_path=str(empty_repo))

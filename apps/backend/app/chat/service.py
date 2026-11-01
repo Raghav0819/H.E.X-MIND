@@ -5,8 +5,8 @@ from sqlalchemy import func
 
 from app.context.summary import maybe_update_summary
 from app.db.models import Conversation, Message
-from app.graph.conversation import build_conversation_graph
-from app.graph.services import Services
+from app.orchestration.conversation import run_conversation
+from app.orchestration.services import Services
 from app.router.schemas import Mode
 
 DEFAULT_TITLE = "New conversation"
@@ -22,7 +22,6 @@ class Exchange:
 class ChatService:
     def __init__(self, services: Services) -> None:
         self._services = services
-        self._graph = build_conversation_graph(services)
 
     async def handle_message(
         self, conversation_id: uuid.UUID, content: str, mode: Mode
@@ -44,14 +43,13 @@ class ChatService:
             await session.flush()
             project_id = conversation.project_id
 
-        state = await self._graph.ainvoke(
-            {
-                "conversation_id": conversation_id,
-                "project_id": project_id,
-                "message_id": user_message.id,
-                "content": content,
-                "mode": mode,
-            }
+        state = await run_conversation(
+            self._services,
+            conversation_id=conversation_id,
+            project_id=project_id,
+            message_id=user_message.id,
+            content=content,
+            mode=mode,
         )
 
         plan = state["plan"]

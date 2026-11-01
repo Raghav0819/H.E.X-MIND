@@ -11,9 +11,9 @@ from app.chat.service import ChatService
 from app.config import Settings, get_settings
 from app.context.manager import ContextManager
 from app.db.session import create_engine, create_sessionmaker
-from app.graph.background import BackgroundTasks
-from app.graph.services import Services
 from app.memory.store import Memory, OllamaEmbedding
+from app.orchestration.background import BackgroundTasks
+from app.orchestration.services import Services
 from app.providers.ollama import OllamaAdapter
 from app.providers.openai_compat import GEMINI_BASE_URL, GROQ_BASE_URL, OpenAICompatAdapter
 from app.providers.pricing import Pricing
