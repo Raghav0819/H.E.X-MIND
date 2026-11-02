@@ -13,14 +13,20 @@ export function AgentGrid({ events }: { events: AgentEvent[] }) {
   return (
     <div className="agent-grid" role="list" aria-label="Agents">
       {agents.map((agent) => (
-        <article key={agent.name} className="agent-card" role="listitem" data-active={agent.active > 0}>
+        <article
+          key={agent.name}
+          className="agent-card"
+          role="listitem"
+          data-active={agent.active > 0}
+          data-failed={agent.active === 0 && agent.lastFailed}
+        >
           <header className="agent-card__header">
             <span className="agent-card__name mono">{agent.name}</span>
             <FrameworkBadge framework={agent.framework} />
           </header>
           <div className="agent-card__status">
             <span className="agent-card__dot" aria-hidden="true" />
-            {agent.active > 0 ? 'running' : 'idle'} · {agent.kind}
+            {agent.active > 0 ? 'running' : agent.lastFailed ? 'failed' : 'idle'} · {agent.kind}
             {agent.parent && <span className="agent-card__parent"> in {agent.parent}</span>}
           </div>
           <dl className="agent-card__stats">

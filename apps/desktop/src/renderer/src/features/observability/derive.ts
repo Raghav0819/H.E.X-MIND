@@ -25,6 +25,8 @@ export interface AgentStats {
   active: number
   invocations: number
   lastDurationMs: number | null
+  /** The most recent invocation ended with an error. */
+  lastFailed: boolean
   llmCalls: number
   inputTokens: number
   outputTokens: number
@@ -49,6 +51,7 @@ export function deriveAgents(events: AgentEvent[]): AgentStats[] {
         active: 0,
         invocations: 0,
         lastDurationMs: null,
+        lastFailed: false,
         llmCalls: 0,
         inputTokens: 0,
         outputTokens: 0,
@@ -77,6 +80,7 @@ export function deriveAgents(events: AgentEvent[]): AgentStats[] {
         const agent = get(event.payload.agent, event.payload.framework)
         agent.active = Math.max(0, agent.active - 1)
         agent.lastDurationMs = event.payload.duration_ms
+        agent.lastFailed = !event.payload.ok
         agent.lastSeq = event.seq
         break
       }
@@ -112,6 +116,7 @@ export interface TopologyNode {
   framework: Framework
   kind: string
   active: boolean
+  failed: boolean
   invocations: number
   children: TopologyNode[]
 }
@@ -134,6 +139,7 @@ export function deriveTopology(events: AgentEvent[]): TopologyNode[] {
       framework: a.framework,
       kind: a.kind,
       active: a.active > 0,
+      failed: a.active === 0 && a.lastFailed,
       invocations: a.invocations,
       children: []
     })
@@ -229,4 +235,71 @@ export function schemaChecks(events: AgentEvent[]): EventOf<'schema_validated'>[
 export function leaseSecondsLeft(leaseExpiresAt: string | null, now: number): number | null {
   if (!leaseExpiresAt) return null
   return Math.max(0, Math.round((Date.parse(leaseExpiresAt) - now) / 1000))
+}
+
+// ---------- A2A exchanges ----------
+
+export interface A2AStep {
+  seq: number
+  ts: string
+  side: 'client' | 'server'
+  direction: 'sent' | 'received'
+  state: string | null
+  summary: string | null
+}
+
+export interface A2AExchange {
+  exchangeId: string
+  /** The remote crew (agent card name), e.g. coder_crew. */
+  crew: string
+  a2aTaskId: string | null
+  taskId: string | null
+  startedAt: string
+  durationMs: number | null
+  /** Last known A2A task state: submitted | working | completed | failed, or sent. */
+  state: string
+  /** True when both sides recorded the same trace id: one trace across the A2A boundary. */
+  traceShared: boolean
+  traceId: string | null
+  steps: A2AStep[]
+}
+
+/** Joins the client (orchestrator) and server (crew) sides of each A2A exchange. */
+export function deriveA2AExchanges(events: AgentEvent[]): A2AExchange[] {
+  const byId = new Map<string, A2AExchange>()
+  const traces = new Map<string, Set<string>>()
+  for (const e of ofType(events, 'a2a_message')) {
+    const p = e.payload
+    let exchange = byId.get(p.exchange_id)
+    if (!exchange) {
+      exchange = {
+        exchangeId: p.exchange_id,
+        crew: p.side === 'client' ? p.peer : p.agent,
+        a2aTaskId: null,
+        taskId: e.task_id,
+        startedAt: e.ts,
+        durationMs: null,
+        state: 'sent',
+        traceShared: false,
+        traceId: null,
+        steps: []
+      }
+      byId.set(p.exchange_id, exchange)
+      traces.set(p.exchange_id, new Set())
+    }
+    exchange.steps.push({ seq: e.seq, ts: e.ts, side: p.side, direction: p.direction, state: p.task_state, summary: p.summary })
+    exchange.a2aTaskId = p.a2a_task_id ?? exchange.a2aTaskId
+    if (p.task_state) exchange.state = p.task_state
+    if (p.side === 'client' && p.direction === 'received' && p.duration_ms !== null) exchange.durationMs = p.duration_ms
+    if (p.trace_id) {
+      exchange.traceId = exchange.traceId ?? p.trace_id
+      traces.get(p.exchange_id)!.add(`${p.side}:${p.trace_id}`)
+    }
+  }
+  for (const exchange of byId.values()) {
+    const ids = [...traces.get(exchange.exchangeId)!]
+    const sides = new Set(ids.map((s) => s.split(':')[0]))
+    exchange.traceShared = sides.size === 2 && new Set(ids.map((s) => s.split(':')[1])).size === 1
+  }
+  return [...byId.values()]
 }

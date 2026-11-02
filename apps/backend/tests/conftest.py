@@ -19,6 +19,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import command
+from app.a2a.client import a2a_http_client
+from app.a2a.server import build_crew_app
 from app.config import Settings
 from app.db.models import Base
 from app.main import create_app
@@ -64,6 +66,7 @@ def settings(tmp_path: Path) -> Settings:
         # Nothing listens on the discard port: the real Ollama is never used by default.
         ollama_url="http://127.0.0.1:9",
         review_retry_delays_s=[0.0],
+        crew_service_autostart=False,
         _env_file=None,
     )
 
@@ -71,10 +74,18 @@ def settings(tmp_path: Path) -> Settings:
 @pytest.fixture
 async def app(migrated_database: str, settings: Settings) -> AsyncIterator[FastAPI]:
     app = create_app(settings)
+    # The CrewAI crews are still called over A2A (real JSON-RPC, agent cards, task lifecycle),
+    # but the crew service runs in-process so it shares the scripted providers.
+    services = app.state.services
+    await services.a2a_http.aclose()
+    services.a2a_http = a2a_http_client(
+        settings, transport=httpx.ASGITransport(app=build_crew_app(services))
+    )
     tables = ", ".join(t.name for t in Base.metadata.sorted_tables)
     async with app.state.engine.begin() as conn:
         await conn.execute(text(f"TRUNCATE {tables} CASCADE"))
     yield app
+    await services.a2a_http.aclose()
     await app.state.engine.dispose()
 
 

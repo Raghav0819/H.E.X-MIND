@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest'
 
 import type { AgentEvent } from '../../generated/events'
-import { callbackEvents, callbackHook, deriveAgents, deriveClaimLog, deriveTopology, leaseSecondsLeft, schemaChecks } from './derive'
+import {
+  callbackEvents,
+  callbackHook,
+  deriveA2AExchanges,
+  deriveAgents,
+  deriveClaimLog,
+  deriveTopology,
+  leaseSecondsLeft,
+  schemaChecks
+} from './derive'
 
 let seq = 0
 function ev(type: AgentEvent['type'], payload: object, agent_id: string | null = null, task_id: string | null = null): AgentEvent {
   seq += 1
-  return { schema_version: 2, event_id: `e${seq}`, run_id: 'r1', seq, ts: '2026-11-02T10:00:00Z', type, agent_id, task_id, payload } as AgentEvent
+  return { schema_version: 3, event_id: `e${seq}`, run_id: 'r1', seq, ts: '2026-11-02T10:00:00Z', type, agent_id, task_id, payload } as AgentEvent
 }
 
 function runEvents(): AgentEvent[] {
@@ -50,6 +59,16 @@ describe('deriveAgents', () => {
     expect(agents.get('reviewer')).toMatchObject({ framework: 'adk', active: 1, lastActivity: 'before_model_callback: 1 message(s), 0 tool(s)' })
     expect(agents.get('execute')!.active).toBe(1)
   })
+
+  it('marks agents whose last invocation failed', () => {
+    seq = 0
+    const events = [
+      ev('agent_started', { agent: 'coder', framework: 'adk', kind: 'custom', parent: null }),
+      ev('agent_finished', { agent: 'coder', framework: 'adk', ok: false, duration_ms: 10 })
+    ]
+    expect(deriveAgents(events)[0]).toMatchObject({ active: 0, lastFailed: true })
+    expect(deriveTopology(events)[0]).toMatchObject({ active: false, failed: true })
+  })
 })
 
 describe('deriveTopology', () => {
@@ -89,5 +108,36 @@ describe('Blackboard and callbacks', () => {
     expect(leaseSecondsLeft('2026-11-02T10:01:30Z', now)).toBe(90)
     expect(leaseSecondsLeft('2026-11-02T09:59:00Z', now)).toBe(0)
     expect(leaseSecondsLeft(null, now)).toBeNull()
+  })
+})
+
+describe('deriveA2AExchanges', () => {
+  it('joins both sides of an exchange with its lifecycle and shared trace', () => {
+    seq = 0
+    const msg = (side: 'client' | 'server', direction: 'sent' | 'received', task_state: string | null, extra: object = {}) =>
+      ev('a2a_message', {
+        side,
+        direction,
+        agent: side === 'client' ? 'orchestrator' : 'coder_crew',
+        peer: side === 'client' ? 'coder_crew' : 'orchestrator',
+        exchange_id: 'x1',
+        a2a_task_id: side === 'server' || direction === 'received' ? 'a2a-1' : null,
+        context_id: null,
+        task_state,
+        trace_id: 'trace-1',
+        duration_ms: null,
+        summary: null,
+        ...extra
+      }, 'coder_crew', 't1')
+    const [exchange, ...rest] = deriveA2AExchanges([
+      msg('client', 'sent', null),
+      msg('server', 'received', 'submitted'),
+      msg('server', 'sent', 'working'),
+      msg('server', 'sent', 'completed'),
+      msg('client', 'received', 'completed', { duration_ms: 4200, trace_id: null })
+    ])
+    expect(rest).toEqual([])
+    expect(exchange).toMatchObject({ crew: 'coder_crew', a2aTaskId: 'a2a-1', taskId: 't1', state: 'completed', durationMs: 4200, traceShared: true })
+    expect(exchange.steps.map((s) => s.state)).toEqual([null, 'submitted', 'working', 'completed', 'completed'])
   })
 })

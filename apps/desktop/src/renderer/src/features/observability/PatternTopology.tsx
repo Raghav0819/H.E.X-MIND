@@ -9,7 +9,8 @@ const PATTERN: Record<string, string> = {
   parallel: 'Parallel',
   llm: 'LLM agent',
   custom: 'Deterministic step',
-  crew: 'CrewAI crew'
+  crew: 'CrewAI crew',
+  remote_a2a: 'A2A remote agent'
 }
 
 /**
@@ -24,7 +25,7 @@ export function PatternTopology({ events }: { events: AgentEvent[] }) {
     <div className="obs-topology">
       <p className="obs-note">
         Google ADK orchestrates (<FrameworkBadge framework="adk" />); CrewAI crews do the planning and coding (
-        <FrameworkBadge framework="crewai" />). Highlighted nodes are running now.
+        <FrameworkBadge framework="crewai" />), reached over A2A. Highlighted nodes are running now.
       </p>
       <ul className="topology" role="tree" aria-label="Agent topology">
         {roots.map((node) => (
@@ -38,10 +39,11 @@ export function PatternTopology({ events }: { events: AgentEvent[] }) {
 function TopologyItem({ node }: { node: TopologyNode }) {
   return (
     <li role="treeitem" aria-expanded={node.children.length > 0 ? true : undefined}>
-      <div className="topology__node" data-active={node.active} data-kind={node.kind}>
+      <div className="topology__node" data-active={node.active} data-failed={node.failed} data-kind={node.kind}>
         <span className="topology__name mono">{node.name}</span>
         <FrameworkBadge framework={node.framework} />
         <span className="topology__pattern">{PATTERN[node.kind] ?? node.kind}</span>
+        {node.failed && <span className="topology__failed">failed</span>}
         {node.invocations > 1 && (
           <span className="topology__count" title="Times this agent ran">
             ×{node.invocations}

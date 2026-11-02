@@ -219,6 +219,22 @@ export const SETTLED_RUN_STATUSES = new Set([
   'reverted'
 ])
 
+/** A CrewAI crew's A2A Agent Card as served by the crew service (`GET /a2a/agents`). */
+export interface A2AAgent {
+  role: string
+  reachable: boolean
+  error?: string
+  card: {
+    name: string
+    description: string
+    url: string
+    version: string
+    protocolVersion?: string
+    capabilities?: { streaming?: boolean }
+    skills: { id: string; name: string; description: string; tags?: string[] }[]
+  } | null
+}
+
 export interface Task {
   id: string
   run_id: string

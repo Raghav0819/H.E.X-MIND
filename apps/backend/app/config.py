@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     sandbox_images: list[str] = ["node:22-alpine", "python:3.11-slim"]
     sandbox_timeout_s: int = 120
 
+    # CrewAI crews served over A2A (python -m app.a2a). The backend starts the service itself
+    # unless it is already running or autostart is off (e.g. a separate Cloud Run service).
+    crew_service_url: str = "http://127.0.0.1:8766"
+    crew_service_autostart: bool = True
+    a2a_timeout_s: float = 1800
+
     # OpenTelemetry: OTLP/HTTP traces endpoint, e.g. http://127.0.0.1:4318/v1/traces.
     otlp_endpoint: str | None = None
 

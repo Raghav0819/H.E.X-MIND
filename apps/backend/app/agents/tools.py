@@ -1,6 +1,7 @@
 """CrewAI tools backed by the MCP workspace server. Each call is reported through `on_call` so the
 run gets `tool_called` events."""
 
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -78,3 +79,10 @@ def make_tools(
         tool._listener = listener
         tools.append(tool)
     return tools
+
+
+def tool_summary(name: str, args: dict[str, Any], text: str) -> str:
+    """One line for a tool_called event: the target and the first line of the result."""
+    target = args.get("path") or args.get("name") or args.get("query") or ""
+    first_line = re.sub(r"\s+", " ", text.strip().splitlines()[0] if text.strip() else "")[:120]
+    return f"{target}: {first_line}" if target else first_line

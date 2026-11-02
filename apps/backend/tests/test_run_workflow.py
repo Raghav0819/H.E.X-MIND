@@ -262,6 +262,27 @@ async def test_agents_build_reviewed_changes_in_an_isolated_worktree(
               if e["type"] == "schema_validated"]  # fmt: skip
     assert schema == [("router", "valid"), ("planner", "valid")] + [("reviewer", "valid")] * 3
     assert types.count("agent_started") == types.count("agent_finished")
+
+    # A2A: the CrewAI crews ran behind ADK RemoteA2aAgents. Every exchange has both sides,
+    # the full A2A task lifecycle, one A2A task id, and one trace across the boundary.
+    kinds = {e["payload"]["agent"]: e["payload"]["kind"] for e in events
+             if e["type"] == "agent_started"}  # fmt: skip
+    assert kinds["planner_crew"] == kinds["coder_crew"] == "remote_a2a"
+    exchanges: defaultdict[str, list[dict]] = defaultdict(list)
+    for e in events:
+        if e["type"] == "a2a_message":
+            exchanges[e["payload"]["exchange_id"]].append(e["payload"])
+    assert len(exchanges) == 1 + 3  # one Planner call + one Coder call per round (1 + 2)
+    for messages in exchanges.values():
+        assert [(m["side"], m["direction"], m["task_state"]) for m in messages] == [
+            ("client", "sent", None),
+            ("server", "received", "submitted"),
+            ("server", "sent", "working"),
+            ("server", "sent", "completed"),
+            ("client", "received", "completed"),
+        ]
+        assert len({m["a2a_task_id"] for m in messages[1:]}) == 1
+        assert len({m["trace_id"] for m in messages if m["trace_id"]}) == 1
     diff_ready = next(e for e in events if e["type"] == "diff_ready")
     assert sorted(diff_ready["payload"]["files"]) == sorted(changes)
     writes = [
@@ -300,6 +321,18 @@ async def test_provider_failure_fails_the_run_and_cleans_up(
     assert events[-1]["type"] == "run_failed"
     assert "No task was completed" in events[-1]["payload"]["error"]
     assert not Path(run.worktree_path or "").exists()  # nothing to review, worktree removed
+    # Failed agents are closed with ok=False instead of looking like they are still running.
+    started = Counter(e["payload"]["agent"] for e in events if e["type"] == "agent_started")
+    finished = Counter(e["payload"]["agent"] for e in events if e["type"] == "agent_finished")
+    assert started == finished
+    failed = {e["payload"]["agent"] for e in events
+              if e["type"] == "agent_finished" and not e["payload"]["ok"]}  # fmt: skip
+    assert {"coder", "reflection_loop", "finalize", "run_orchestrator"} <= failed
+    assert any(agent.startswith("coder_0") for agent in failed)  # the CrewAI crew itself
+    # The remote agent completed its call; the failure is in the A2A task state.
+    a2a = [(e["payload"]["side"], e["payload"]["task_state"]) for e in events
+           if e["type"] == "a2a_message"]  # fmt: skip
+    assert a2a[-2:] == [("server", "failed"), ("client", "failed")]
 
 
 class LazyCoderScript:

@@ -122,7 +122,12 @@ async def run_agent(
         **hooks,
     )
     with telemetry.span() if telemetry is not None else contextlib.nullcontext():
-        result = await crew.kickoff_async()
+        try:
+            result = await crew.kickoff_async()
+        except Exception as exc:
+            if telemetry is not None:
+                telemetry.kickoff_failed(exc)
+            raise
     return result.raw
 
 

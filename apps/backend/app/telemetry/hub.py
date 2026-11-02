@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from google.adk.agents import BaseAgent, LlmAgent, LoopAgent, ParallelAgent, SequentialAgent
+from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
 from opentelemetry import trace
 
 from app.events.log import EventType, append_event
@@ -46,6 +47,8 @@ ADK_HOOKS = (
 
 
 def agent_kind(agent: BaseAgent) -> str:
+    if isinstance(agent, RemoteA2aAgent):
+        return "remote_a2a"
     for cls, kind in (
         (LlmAgent, "llm"),
         (SequentialAgent, "sequential"),
@@ -67,7 +70,8 @@ class TelemetryHub:
     services: Services
     run_id: uuid.UUID
     loop: asyncio.AbstractEventLoop = field(default_factory=asyncio.get_running_loop)
-    _started: dict[tuple[str, str], list[float]] = field(default_factory=dict)
+    # (task id, invocation id, agent name) -> start times of invocations still open.
+    _started: dict[tuple[str, str, str], list[float]] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
     # ---------- recording ----------
@@ -105,11 +109,37 @@ class TelemetryHub:
         except Exception:
             logger.exception("telemetry: threadsafe record failed for run %s", self.run_id)
 
-    def _start(self, key: tuple[str, str]) -> None:
+    def _start(self, key: tuple[str, str, str]) -> None:
         with self._lock:
             self._started.setdefault(key, []).append(time.monotonic())
 
-    def _elapsed_ms(self, key: tuple[str, str]) -> int | None:
+    async def abort_open(self, *, task_id: uuid.UUID | None = None, error: str = "") -> None:
+        """ADK skips after_agent callbacks when an agent raises, so agents of a failed task
+        (or, with no task_id, of a failed run) would look like they are still running. Record
+        them as finished with ok=False."""
+        with self._lock:
+            keys = [
+                k
+                for k, v in self._started.items()
+                if v and (task_id is None or k[0] == str(task_id))
+            ]
+            opened = {k: self._started.pop(k) for k in keys}
+        now = time.monotonic()
+        for (task, _, name), starts in opened.items():
+            for start in starts:
+                await self.record(
+                    EventType.AGENT_FINISHED,
+                    task_id=uuid.UUID(task) if task else None,
+                    agent_id=name,
+                    agent=name,
+                    framework="adk",
+                    ok=False,
+                    duration_ms=int((now - start) * 1000),
+                )
+        if opened:
+            logger.info("telemetry: closed %d agent(s) after failure: %s", len(opened), error[:200])
+
+    def _elapsed_ms(self, key: tuple[str, str, str]) -> int | None:
         with self._lock:
             stack = self._started.get(key)
             if not stack:
@@ -165,7 +195,7 @@ class TelemetryHub:
             )
 
         async def before_agent(callback_context: Any) -> None:
-            self._start((callback_context.invocation_id, name))
+            self._start((str(task_id or ""), callback_context.invocation_id, name))
             if schema_name:
                 callback_context.state[SCHEMA_CHECK_KEY] = None
             self._span(**{"agent.name": name, "agent.framework": "adk", "agent.kind": kind})
@@ -187,7 +217,9 @@ class TelemetryHub:
                 agent=name,
                 framework="adk",
                 ok=True,
-                duration_ms=self._elapsed_ms((callback_context.invocation_id, name)),
+                duration_ms=self._elapsed_ms(
+                    (str(task_id or ""), callback_context.invocation_id, name)
+                ),
             )
             check = callback_context.state.get(SCHEMA_CHECK_KEY) if schema_name else None
             if check and check.get("agent") == name:
@@ -334,6 +366,18 @@ class CrewCallbacks:
             duration_ms=int((time.monotonic() - self._started) * 1000) if self._started else None,
         )
         return output
+
+    def kickoff_failed(self, error: BaseException) -> None:
+        """CrewAI runs no after-kickoff hook when the crew raises; record the failure."""
+        self.hub.record_threadsafe(
+            EventType.AGENT_FINISHED,
+            task_id=self.task_id,
+            agent_id=self.agent_id,
+            agent=self.agent_id,
+            framework="crewai",
+            ok=False,
+            duration_ms=int((time.monotonic() - self._started) * 1000) if self._started else None,
+        )
 
     def span(self) -> contextlib.AbstractContextManager[None]:
         return self.hub.crew_span(self.agent_id)

@@ -2,12 +2,12 @@
 
 - prepare:  snapshot the user's workspace, create an isolated git worktree, start the MCP
             workspace server bound to it.
-- plan:     the Planner breaks the request into Blackboard tasks (medium/high complexity);
-            low complexity gets a single task.
+- plan:     the CrewAI Planner crew (called over A2A) breaks the request into Blackboard
+            tasks (medium/high complexity); low complexity gets a single task.
 - execute:  a pool of workers claims tasks atomically. Each claimed task runs a reflection
-            loop, an ADK LoopAgent[coder -> review_gate -> decide]: the CrewAI Coder edits,
-            the sandbox check runs, the ADK Reviewer (Pydantic ReviewResult) judges, and
-            `decide` applies the acceptance rules and escalates to end the loop.
+            loop, an ADK LoopAgent[coder -> review_gate -> decide]: the CrewAI Coder crew
+            (over A2A) edits, the sandbox check runs, the ADK Reviewer (Pydantic ReviewResult)
+            judges, and `decide` applies the acceptance rules and escalates to end the loop.
 - finalize: diff the worktree against the snapshot, record file_changes, emit diff_ready, and
             wait for the user's approval. Nothing touches the user's files here.
 
@@ -33,11 +33,11 @@ from google.adk.events import Event
 from pydantic import PrivateAttr
 from sqlalchemy import select
 
+from app.a2a.client import call_crew
+from app.a2a.protocol import CrewRequest, CrewRole
 from app.agents import roles
 from app.agents.adk_llm import HexAdkLlm
-from app.agents.llm import HexLLM
 from app.agents.mcp_bridge import McpWorkspace
-from app.agents.tools import CODER, READ_ONLY, make_tools
 from app.blackboard import store
 from app.context.workspace_scan import list_files, mentioned_files
 from app.db.models import CheckResult, FileChange, Message, Project, Review, Run, Task
@@ -120,36 +120,37 @@ class RunWorkflow:
                 session, self.run_id, type, task_id=task_id, agent_id=agent_id, payload=payload
             )
 
-    def _llm(self, purpose: str, task_id: uuid.UUID | None, agent_id: str) -> HexLLM:
-        return HexLLM(
-            router=self.services.providers,
-            loop=self.loop,
-            ctx=CallContext(
-                run_id=self.run_id, task_id=task_id, agent_id=agent_id, complexity=self.complexity
+    async def _crew(
+        self,
+        role: CrewRole,
+        prompt: str,
+        expected_output: str,
+        *,
+        agent_id: str,
+        parent: str,
+        task_id: uuid.UUID | None = None,
+    ) -> str:
+        """Run a CrewAI crew over A2A (ADK RemoteA2aAgent -> crew service)."""
+        assert self.worktree is not None and self.workspace_root is not None
+        assert self.services.a2a_http is not None, "no A2A client configured"
+        return await call_crew(
+            role,
+            hub=self.telemetry,
+            http=self.services.a2a_http,
+            settings=self.services.settings,
+            prompt=prompt,
+            parent=parent,
+            request=CrewRequest(
+                exchange_id=uuid.uuid4(),
+                run_id=self.run_id,
+                task_id=task_id,
+                agent_id=agent_id,
+                worktree=str(self.worktree),
+                workspace=str(self.workspace_root),
+                complexity=self.complexity,
+                expected_output=expected_output,
             ),
-            purpose=purpose,  # type: ignore[arg-type]
-            native_tools=self.services.settings.native_tool_calling,
         )
-
-    def _tools(self, names: tuple[str, ...], task_id: uuid.UUID | None, agent_id: str):
-        assert self.mcp is not None
-
-        def listener(name: str, args: dict[str, Any], ok: bool, text: str) -> None:
-            # Called on a CrewAI worker thread: record the event on the server loop.
-            future = asyncio.run_coroutine_threadsafe(
-                self.emit(
-                    EventType.TOOL_CALLED,
-                    task_id=task_id,
-                    agent_id=agent_id,
-                    tool=name,
-                    ok=ok,
-                    summary=_tool_summary(name, args, text),
-                ),
-                self.loop,
-            )
-            future.result(timeout=30)
-
-        return make_tools(self.mcp, names, listener)
 
     async def _memory(self, method: str, *args: Any, **kwargs: Any) -> Any:
         memory = self.services.memory
@@ -212,20 +213,16 @@ class RunWorkflow:
     async def plan(self) -> None:
         await set_status(self.services, self.run_id, "planning")
         standards = await self._memory("standards_for", self.request, k=3)
-        agent = roles.planner(
-            self._llm("planner", None, "planner"),
-            self._tools(READ_ONLY, None, "planner"),
-            self.services.settings.agent_max_iterations,
-        )
         prompt = roles.planner_prompt(self.request, standards)
         plan: roles.Plan | None = None
         errors: list[str] = []
         for _ in range(2):  # one repair attempt
-            raw = await roles.run_agent(
-                agent,
+            raw = await self._crew(
+                "planner",
                 prompt,
                 "A JSON object with a tasks array",
-                self.telemetry.crew_callbacks("planner", parent="plan"),
+                agent_id="planner",
+                parent="plan",
             )
             try:
                 plan = roles.parse_json_output(raw, roles.Plan)
@@ -321,8 +318,10 @@ class RunWorkflow:
                 if not heartbeat.done() or not heartbeat.result():
                     raise  # the run itself is being cancelled
                 logger.warning("worker %s lost its lease on task %s; stopping", name, task.id)
+                await self.telemetry.abort_open(task_id=task.id, error="lease lost")
             except Exception as exc:
                 logger.exception("task %s failed", task.id)
+                await self.telemetry.abort_open(task_id=task.id, error=str(exc))
                 await self._finish_task(task.id, "failed", error=str(exc))
             finally:
                 heartbeat.cancel()
@@ -595,13 +594,8 @@ class CoderStep(BaseAgent):
         st.round += 1
         st.check, st.review = None, None
         before = await wf._worktree_fingerprint()
-        agent = roles.coder(
-            wf._llm("coder", st.task.id, st.worker),
-            wf._tools(CODER, st.task.id, st.worker),
-            wf.services.settings.agent_max_iterations,
-        )
-        st.summary = await roles.run_agent(
-            agent,
+        st.summary = await wf._crew(
+            "coder",
             roles.coder_prompt(
                 title=st.task.title,
                 description=st.task.description,
@@ -612,7 +606,9 @@ class CoderStep(BaseAgent):
                 feedback=st.feedback,
             ),
             "A short summary of the changes and the final check result",
-            wf.telemetry.crew_callbacks(st.worker, parent="coder", task_id=st.task.id),
+            agent_id=st.worker,
+            parent="coder",
+            task_id=st.task.id,
         )
         # Agents' claims are not evidence: a round that changed no files did nothing,
         # whatever its final answer says.
@@ -839,6 +835,7 @@ async def execute_run(
         succeeded = True
     except Exception as exc:
         exc = _innermost(exc)
+        await workflow.telemetry.abort_open(error=str(exc))
         if not isinstance(exc, RunAborted):
             logger.exception("run %s failed", run_id, exc_info=exc)
         async with services.sessionmaker.begin() as session:
@@ -908,9 +905,3 @@ def _check_summary(check: CheckOutcome | None) -> str:
 
 def _check_feedback(check: CheckOutcome) -> str:
     return f"The `{check.name}` check is failing:\n{_check_summary(check)}"
-
-
-def _tool_summary(name: str, args: dict[str, Any], text: str) -> str:
-    target = args.get("path") or args.get("name") or args.get("query") or ""
-    first_line = re.sub(r"\s+", " ", text.strip().splitlines()[0] if text.strip() else "")[:120]
-    return f"{target}: {first_line}" if target else first_line

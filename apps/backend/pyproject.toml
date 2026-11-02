@@ -4,12 +4,13 @@ version = "0.1.0"
 description = "Local FastAPI backend for the H.E.X Mind desktop IDE"
 requires-python = ">=3.11"
 dependencies = [
+    "a2a-sdk[http-server]~=0.3.10",
     "alembic>=1.20.1",
     "asyncpg>=0.32.0",
     "chromadb>=1.5.9",
-    "crewai>=1.15.28",
+    "crewai[a2a]==1.15.28",
     "fastapi>=0.161.1",
-    "google-adk==2.13.0",
+    "google-adk[a2a]==2.13.0",
     "httpx>=0.28.1",
     "mcp>=1.28.1",
     "pydantic-settings>=2.16.1",

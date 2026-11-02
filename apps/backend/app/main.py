@@ -5,7 +5,8 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api import conversations, health, projects, providers, runs, tasks
+from app.a2a.client import CrewServiceProcess, a2a_http_client
+from app.api import a2a, conversations, health, projects, providers, runs, tasks
 from app.auth import require_token
 from app.chat.service import ChatService
 from app.config import Settings, get_settings
@@ -14,10 +15,7 @@ from app.db.session import create_engine, create_sessionmaker
 from app.memory.store import Memory, OllamaEmbedding
 from app.orchestration.background import BackgroundTasks
 from app.orchestration.services import Services
-from app.providers.ollama import OllamaAdapter
-from app.providers.openai_compat import GEMINI_BASE_URL, GROQ_BASE_URL, OpenAICompatAdapter
-from app.providers.pricing import Pricing
-from app.providers.router import ProviderRouter
+from app.providers.factory import build_providers
 from app.telemetry.tracing import setup_tracing
 
 
@@ -26,30 +24,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     setup_tracing(settings)
     engine = create_engine(settings.database_url)
     sessionmaker = create_sessionmaker(engine)
-    ollama = OllamaAdapter(
-        settings.ollama_url,
-        settings.ollama_model,
-        num_ctx=settings.ollama_num_ctx,
-        timeout_s=settings.ollama_timeout_s,
-    )
-    pricing = Pricing.load()
-    hosted = [
-        OpenAICompatAdapter(
-            name="groq",
-            base_url=GROQ_BASE_URL,
-            api_key=settings.groq_api_key.get_secret_value() if settings.groq_api_key else None,
-            model=settings.groq_model,
-            pricing=pricing,
-        ),
-        OpenAICompatAdapter(
-            name="gemini",
-            base_url=GEMINI_BASE_URL,
-            api_key=settings.gemini_api_key.get_secret_value() if settings.gemini_api_key else None,
-            model=settings.gemini_model,
-            pricing=pricing,
-            requires_thought_signatures=True,
-        ),
-    ]
+    providers_router, adapters = build_providers(settings, sessionmaker)
     memory = None
     if settings.memory_enabled:
         memory = Memory(
@@ -59,23 +34,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     services = Services(
         settings=settings,
         sessionmaker=sessionmaker,
-        providers=ProviderRouter(
-            [ollama, *hosted],
-            sessionmaker,
-            order=settings.provider_order,
-            order_by_complexity=settings.provider_order_by_complexity,
-            quota_cooldown_s=settings.quota_cooldown_s,
-        ),
+        providers=providers_router,
         context=ContextManager(settings.context_budget_tokens),
         background=BackgroundTasks(),
         memory=memory,
+        a2a_http=a2a_http_client(settings),
     )
+    crew_service = CrewServiceProcess(settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if settings.crew_service_autostart:
+            await crew_service.start(services.a2a_http)
         yield
         await services.background.cancel_all()
-        for adapter in (ollama, *hosted):
+        crew_service.stop()
+        await services.a2a_http.aclose()
+        for adapter in adapters:
             await adapter.aclose()
         await engine.dispose()
 
@@ -94,6 +69,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
 
-    for module in (health, projects, runs, providers, conversations, tasks):
+    for module in (health, projects, runs, providers, conversations, tasks, a2a):
         app.include_router(module.router, prefix="/api", dependencies=[Depends(require_token)])
     return app

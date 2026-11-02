@@ -7,7 +7,8 @@ types are built from.
 Versions: v1 froze at the end of M3. v2 (P1) adds the monitoring events fed by ADK and CrewAI
 callbacks through the TelemetryHub (agent_started, agent_finished, callback_fired,
 schema_validated) and reserves guardrail_triggered, a2a_message and prompt_variant_selected for
-P2/P4. Any change needs agreement from all owners and bumps SCHEMA_VERSION.
+P2/P4. v3 (P2) gives a2a_message the fields both ends of an A2A exchange record. Any change
+needs agreement from all owners and bumps SCHEMA_VERSION.
 
 Payloads carry `stub: true` when the work they describe was not really performed (M2 worker
 stubs). The UI must label such events instead of presenting them as agent progress.
@@ -18,7 +19,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 Complexity = Literal["low", "medium", "high"]
 Framework = Literal["adk", "crewai"]
@@ -212,9 +213,19 @@ class GuardrailTriggered(Payload):
 
 
 class A2AMessage(Payload):
+    """One side of an A2A exchange. The orchestrator (client) and the crew service (server)
+    both record theirs; `exchange_id` joins them, `trace_id` shows they share one trace."""
+
     direction: Literal["sent", "received"]
+    side: Literal["client", "server"]
+    agent: str
     peer: str
-    task_state: str | None = None
+    exchange_id: str
+    a2a_task_id: str | None = None
+    context_id: str | None = None
+    task_state: str | None = None  # A2A TaskState: submitted | working | completed | failed
+    trace_id: str | None = None
+    duration_ms: int | None = None
     summary: str | None = None
 
 
