@@ -145,6 +145,9 @@ class OpenAICompatAdapter:
             if k.lower().startswith("x-ratelimit-")
         }
         if response.status_code != 200:
+            salvaged = _salvage_pseudo_tool_call(response, request.tools)
+            if salvaged is not None:
+                return Completion(content=salvaged)
             raise _classify(self.name, response)
 
         data = response.json()
@@ -159,6 +162,30 @@ class OpenAICompatAdapter:
             output_tokens=output_tokens,
             est_cost_usd=self._pricing.cost(self.name, self.model, input_tokens, output_tokens),
         )
+
+
+def _salvage_pseudo_tool_call(
+    response: httpx.Response, tools: list[dict[str, Any]] | None
+) -> str | None:
+    """Groq's gpt-oss sometimes wraps a JSON answer in a call to a tool that was never offered
+    (e.g. `json`); Groq rejects it with 400 `tool_use_failed` and returns the attempt as
+    `failed_generation`. When the named tool is not one we offered, the arguments are the
+    intended answer, so return them as text. Calls to real tools still fail normally."""
+    if response.status_code != 400:
+        return None
+    try:
+        error = response.json().get("error") or {}
+        if error.get("code") != "tool_use_failed":
+            return None
+        attempt = json.loads(error.get("failed_generation") or "")
+    except (ValueError, AttributeError):
+        return None
+    if not isinstance(attempt, dict) or not isinstance(attempt.get("arguments"), dict | list):
+        return None
+    offered = {(t.get("function") or {}).get("name") for t in tools or []}
+    if attempt.get("name") in offered:
+        return None
+    return json.dumps(attempt["arguments"])
 
 
 def _classify(provider: str, response: httpx.Response) -> ProviderError:

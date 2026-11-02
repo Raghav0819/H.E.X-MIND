@@ -696,3 +696,36 @@ async def test_gemini_retry_delay_sets_a_short_cooldown() -> None:
         await adapter.complete(REQUEST)
     assert exc.value.kind == "quota"  # fall back now...
     assert exc.value.retry_after == 39  # ...but only skip the provider for 39s
+
+
+READ_TOOL = [{"type": "function", "function": {"name": "read_file", "parameters": {}}}]
+
+
+def _tool_use_failed(name: str, arguments: object) -> httpx.Response:
+    generation = json.dumps({"name": name, "arguments": arguments})
+    return httpx.Response(
+        400,
+        json={
+            "error": {
+                "message": f"attempted to call tool '{name}' which was not in request.tools",
+                "type": "invalid_request_error",
+                "code": "tool_use_failed",
+                "failed_generation": generation,
+            }
+        },
+    )
+
+
+async def test_json_wrapped_in_an_unoffered_tool_call_is_salvaged() -> None:
+    plan = {"tasks": [{"title": "t"}]}
+    adapter = _hosted(lambda request: _tool_use_failed("json", plan))
+    request = REQUEST.model_copy(update={"tools": READ_TOOL})
+    completion = await adapter.complete(request)
+    assert json.loads(completion.content) == plan and completion.tool_calls == []
+
+
+async def test_failed_calls_to_real_tools_still_fail() -> None:
+    adapter = _hosted(lambda request: _tool_use_failed("read_file", {"bad": 1}))
+    with pytest.raises(ProviderError) as info:
+        await adapter.complete(REQUEST.model_copy(update={"tools": READ_TOOL}))
+    assert info.value.kind == "bad_request"

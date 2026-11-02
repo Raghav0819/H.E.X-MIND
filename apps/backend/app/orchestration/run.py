@@ -552,6 +552,8 @@ class TaskLoopState:
     check: CheckOutcome | None = None
     review: roles.ReviewResult | None = None
     review_prompt: str = ""
+    # Set when every provider failed for the Reviewer on every attempt: no verdict exists.
+    review_unavailable: str | None = None
     finished: bool = False
 
 
@@ -680,8 +682,30 @@ class ReviewGate(BaseAgent):
             EventType.REVIEW_STARTED, task_id=st.task.id, agent_id="reviewer", reviewer="reviewer"
         )
         st.review_prompt = await wf._review_prompt(st.task, st.check)
-        async for event in self.sub_agents[0].run_async(ctx):
-            yield event
+        st.review_unavailable = None
+        # A provider outage is not a verdict: retry the review after a pause (rate limits
+        # and cooldowns clear within a minute) instead of blocking working code.
+        delays = [0.0, *wf.services.settings.review_retry_delays_s]
+        for attempt, delay in enumerate(delays):
+            if delay:
+                await asyncio.sleep(delay)
+            async for event in self.sub_agents[0].run_async(ctx):
+                yield event
+            errors = ctx.session.state.get("review_schema_errors") or []
+            outage = ctx.session.state.get("review_schema_status") == "fallback" and any(
+                str(e).startswith("provider error") for e in errors
+            )
+            if not outage:
+                break
+            logger.warning(
+                "review of task %s: providers unavailable (attempt %d/%d)",
+                st.task.id,
+                attempt + 1,
+                len(delays),
+            )
+        else:
+            st.review, st.review_unavailable = None, str(errors[0])[:300]
+            return
         st.review = roles.ReviewResult.model_validate(ctx.session.state["review"])
         await wf._record_review(st.task, st.review)
 
@@ -735,6 +759,15 @@ class DecideStep(BaseAgent):
                 yield state_event(self, ctx, decision="retry")
             return
 
+        if st.review_unavailable:
+            attempts = 1 + len(wf.services.settings.review_retry_delays_s)
+            yield await self._finish(
+                ctx,
+                "failed",
+                error=f"review unavailable after {attempts} attempts (all providers failed): "
+                f"{st.review_unavailable}",
+            )
+            return
         review = st.review
         assert review is not None
         if review.verdict == "approved" and _accepted(check):

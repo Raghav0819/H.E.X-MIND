@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     task_lease_s: int = 600
     agent_max_iterations: int = 15
     review_max_rounds: int = 2
+    # When every provider fails for the Reviewer, retry the review after these pauses (seconds)
+    # before giving up: an outage is not a verdict.
+    review_retry_delays_s: list[float] = [20.0, 60.0]
 
     # Sandbox for checks. Only these images may be used, whatever a project profile says.
     sandbox_images: list[str] = ["node:22-alpine", "python:3.11-slim"]

@@ -499,3 +499,49 @@ async def test_changes_without_an_accepted_task_are_not_offered(
     assert "diff_ready" not in [e["type"] for e in events]
     assert "1 file(s) were changed but none passed" in events[-1]["payload"]["error"]
     assert not Path(run.worktree_path or "").exists()
+
+
+class FlakyReviewerScript(AgentScript):
+    """Every provider fails for the Reviewer's first `outages` calls on the Todo model task."""
+
+    def __init__(self, outages: int) -> None:
+        super().__init__()
+        self.outages = outages
+
+    def __call__(self, request: LLMRequest) -> Completion:
+        if request.purpose == "reviewer" and self.outages > 0:
+            prompt = "\n".join(m.content or "" for m in request.messages)
+            if 'for the task "Todo model"' in prompt:
+                self.outages -= 1
+                raise ProviderError("rate limited everywhere", retryable=False)
+        return super().__call__(request)
+
+
+@pytest.mark.parametrize(("outages", "expected"), [(1, "completed"), (5, "failed")])
+async def test_reviewer_outage_is_retried_not_treated_as_a_verdict(
+    app: FastAPI, client: httpx.AsyncClient, empty_repo: Path, outages: int, expected: str
+) -> None:
+    use_adapter(app, ScriptedAdapter(FlakyReviewerScript(outages)))  # retries: [0.0] in tests
+
+    exchange = await _start_run(client, empty_repo, "Build a todo module with filtering")
+    await app.state.services.background.wait_all()
+    run_id = uuid.UUID(exchange["run_id"])
+
+    async with app.state.sessionmaker() as session:
+        task = await session.scalar(
+            select(Task).where(Task.run_id == run_id, Task.title == "Todo model")
+        )
+        verdicts = list(
+            await session.scalars(select(Review.verdict).where(Review.task_id == task.id))
+        )
+    assert task is not None and task.status == expected
+    events = (await client.get(f"/api/runs/{run_id}/events")).json()
+    schema = [e["payload"]["status"] for e in events if e["type"] == "schema_validated"
+              and e["payload"]["agent"] == "reviewer" and e["task_id"] == str(task.id)]  # fmt: skip
+    if expected == "completed":
+        assert verdicts == ["approved"] and schema == ["fallback", "valid"]
+    else:
+        # No verdict was invented: the task failed as "review unavailable", not "blocked".
+        assert verdicts == [] and schema == ["fallback", "fallback"]
+        failure = next(e for e in events if e["type"] == "task_failed")
+        assert "review unavailable after 2 attempts" in failure["payload"]["error"]

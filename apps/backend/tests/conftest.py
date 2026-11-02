@@ -63,6 +63,7 @@ def settings(tmp_path: Path) -> Settings:
         database_url=TEST_DATABASE_URL,
         # Nothing listens on the discard port: the real Ollama is never used by default.
         ollama_url="http://127.0.0.1:9",
+        review_retry_delays_s=[0.0],
         _env_file=None,
     )
 
